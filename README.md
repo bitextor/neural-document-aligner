@@ -141,11 +141,11 @@ Different strategies can be applied to save up storage usage when the embeddings
 
 The strategies applied in order to obtain the matches (i.e. results) differ in relation to the selected document alignment strategy. The available strategies are:
 
-1. `faiss`:
-1.1. Search for every document in `src-lang` the `--take-knn` closest documents in `trg-lang`, then sort by distance and once a pair has been selected, will not be selected again. This strategy can be applied with `--results-strategy 0`.
-2. `lev-full`, `lev` and `just-merge`:
-2.1. Union of the best matches in both directions (i.e. from `src-lang` to `trg-lang` and from `trg-lang` to `src-lang`). This strategy can be applied with `--results-strategy 0`.
-2.2. Intersection of the best matches (i.e. the best match for a document from `src-lang` to `trg-lang` is the same in the oposite direction). This strategy can be applied with `--results-strategy 1`.
+* `faiss`:
+   1. Search for every document in `src-lang` the `--take-knn` closest documents in `trg-lang`, then sort by distance and once a pair has been selected, will not be selected again. This strategy can be applied with `--results-strategy 0`.
+* `lev-full`, `lev` and `just-merge`:
+   1. Union of the best matches in both directions (i.e. from `src-lang` to `trg-lang` and from `trg-lang` to `src-lang`). This strategy can be applied with `--results-strategy 0`.
+   2. Intersection of the best matches (i.e. the best match for a document from `src-lang` to `trg-lang` is the same in the oposite direction). This strategy can be applied with `--results-strategy 1`.
 
 ### Parameters
 
