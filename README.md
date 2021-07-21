@@ -152,44 +152,44 @@ The strategies applied in order to obtain the matches (i.e. results) differ in r
 There are different parameters in order to achieve different behaviours:
 
 * Mandatory:
-** `input-file`: the input file where we will have the necessary information to look for matches of the provided documents.
-** `src-lang`: language code (e.g. 'en', 'fr') of the source documents.
-** `trg-lang`: language code (e.g. 'en', 'fr') of the target documents.
+  * `input-file`: the input file where we will have the necessary information to look for matches of the provided documents.
+  * `src-lang`: language code (e.g. 'en', 'fr') of the source documents.
+  * `trg-lang`: language code (e.g. 'en', 'fr') of the target documents.
 * Optional:
-** Meta:
-*** `-h, --help`: help message and exit
-** Strategies:
-*** `--docalign-strategy {faiss,lev,lev-full,just-merge}`: strategy to select the matches among the documents.
-*** `--weights-strategy {0,1,2,3}`: strategy to weight the embeddings.
-*** `--merging-strategy {0,1,2,3,4,5}`: strategy to merge the embeddings.
-*** `--results-strategy N`: strategy to handle the results from the document alignment.
-*** `--gen-emb-optimization-strategy {0,1,2}`: embedding optimization strategy when the embeddings are being generated (i.e. the embeddings will be stored using the selected strategy).
-*** `--emb-optimization-strategy {0,1,2}`: embedding optimization strategy when the embeddings are being loaded.
-** Multiprocessing:
-*** `--processes N`: number of processes to use if multiprocessing is possible (is possible in the docalign strategies `lev`, `lev-full` and `just-merge`).
-*** `--workers N`: number of workers to use if multiprocessing is possible (is possible in the docalign strategies `lev`, `lev-full` and `just-merge`).
-** Embeddings:
-*** `--dim N`: dimensionality of the embeddings. This value might change if you change your embeddings generation source or you apply different processes (e.g. embedding reduction).
-*** `--generate-embeddings`: by default, the provided paths to the embeddings in the `input-file` are expected to exist. In the case that you want to generate the embeddings, this option must be set.
-*** `--generate-and-finish`: if you just want to generate the embeddings and do not perform the matching of the documents, this option must be set to finish the execution once the embeddings have been generated.
-*** `--embed-script-path PATH`: path to the file `embed.py` of [LASER](https://github.com/facebookresearch/LASER). This parameter allows to change the default path, which is the one defined by the LASER installation. The default value is the file `embed.py` which is inside this repository (there are options which are not in the original LASER and are mandatory in order to generate correctly the embeddings). The reason about chanching this file is add different options to optimize the behaviour of LASER without necessary modify your LASER installation.
-*** `--random-mask-value <v_1>,<v_2>,...,<v_dim>`: mask to apply to every embedding. If you have a mask which you know that it works better for a specific pair of languagues, you may apply it through this parameter. The expected values are float values.
-*** `--check-zeros-mask`: if you want to remove the components of the embeddings which, after applying the mask, the result is 0, this option must be set.
-** Other:
-*** `--min-sanity-check N`: number of entries of the `input-file` which will be checked out to be ok.
-*** `--input-src-and-trg-splitted`: if you want to provide an `input-file` with the second format instead the default, this option must be set.
-*** `--do-not-merge-on-preprocessing`: the merging strategy is applied in a preprocessing step, but some strategies might need to apply the merging strategy by their own (e.g. `lev`). In that case, this option must be set.
-*** `--gold-standard PATH`: if you want to obtain the recall and precision of the resulted matches, you need to provide a gold standar with the format 'src_document_path\ttrg_document_path'.
-*** `--apply-heuristics`: you can enable heuristics if you set this option. The heuristics are different conditions which makes us to be sure that two documents are not a match even if they have been matched, and with the heuristics that match will be removed.
-*** `--output-with-urls`: if you provided URLs in the `input-file` and you want to show them in the results instead of the paths, this option must be set. If this option is set, `--gold-standard PATH` will be expected to contain URLs instead of the paths to the documents.
-*** `--process-max-entries N`: max. number of entries to process from the `input-file`.
-** Other (`faiss` docalign strategy):
-*** `--faiss-threshold F`: if the score of a match does not reach the provided threshold, it will be discarded.
-*** `--faiss-reverse-direction`: instead of going from `src-lang` to `trg-lang` we go from `trg-lang` to `src-lang`.
-*** `--faiss-take-knn N`: number of documents to check the distance from one document of `src-lang` to `trg-lang`.
-** Other (logging):
-*** `--logging-level N`: level of logging to show the different lines related to a concrete severity. The more verbose value is a value of 0, but the default value is to only show the necessary information (warning and above).
-*** `--log-file PATH`: log file where all the logging entries will be stored. Even if this option is set, the logging entries will be showed up in the standar error output (if you want to remove those lines, you will need to redirect the standar error output).
+  * Meta:
+    * `-h, --help`: help message and exit
+  * Strategies:
+    * `--docalign-strategy {faiss,lev,lev-full,just-merge}`: strategy to select the matches among the documents.
+    * `--weights-strategy {0,1,2,3}`: strategy to weight the embeddings.
+    * `--merging-strategy {0,1,2,3,4,5}`: strategy to merge the embeddings.
+    * `--results-strategy N`: strategy to handle the results from the document alignment.
+    * `--gen-emb-optimization-strategy {0,1,2}`: embedding optimization strategy when the embeddings are being generated (i.e. the embeddings will be stored using the selected strategy).
+    * `--emb-optimization-strategy {0,1,2}`: embedding optimization strategy when the embeddings are being loaded.
+  * Multiprocessing:
+    * `--processes N`: number of processes to use if multiprocessing is possible (is possible in the docalign strategies `lev`, `lev-full` and `just-merge`).
+    * `--workers N`: number of workers to use if multiprocessing is possible (is possible in the docalign strategies `lev`, `lev-full` and `just-merge`).
+  * Embeddings:
+    * `--dim N`: dimensionality of the embeddings. This value might change if you change your embeddings generation source or you apply different processes (e.g. embedding reduction).
+    * `--generate-embeddings`: by default, the provided paths to the embeddings in the `input-file` are expected to exist. In the case that you want to generate the embeddings, this option must be set.
+    * `--generate-and-finish`: if you just want to generate the embeddings and do not perform the matching of the documents, this option must be set to finish the execution once the embeddings have been generated.
+    * `--embed-script-path PATH`: path to the file `embed.py` of [LASER](https://github.com/facebookresearch/LASER). This parameter allows to change the default path, which is the one defined by the LASER installation. The default value is the file `embed.py` which is inside this repository (there are options which are not in the original LASER and are mandatory in order to generate correctly the embeddings). The reason about chanching this file is add different options to optimize the behaviour of LASER without necessary modify your LASER installation.
+    * `--random-mask-value <v_1>,<v_2>,...,<v_dim>`: mask to apply to every embedding. If you have a mask which you know that it works better for a specific pair of languagues, you may apply it through this parameter. The expected values are float values.
+    * `--check-zeros-mask`: if you want to remove the components of the embeddings which, after applying the mask, the result is 0, this option must be set.
+  * Other:
+    * `--min-sanity-check N`: number of entries of the `input-file` which will be checked out to be ok.
+    * `--input-src-and-trg-splitted`: if you want to provide an `input-file` with the second format instead the default, this option must be set.
+    * `--do-not-merge-on-preprocessing`: the merging strategy is applied in a preprocessing step, but some strategies might need to apply the merging strategy by their own (e.g. `lev`). In that case, this option must be set.
+    * `--gold-standard PATH`: if you want to obtain the recall and precision of the resulted matches, you need to provide a gold standar with the format 'src_document_path\ttrg_document_path'.
+    * `--apply-heuristics`: you can enable heuristics if you set this option. The heuristics are different conditions which makes us to be sure that two documents are not a match even if they have been matched, and with the heuristics that match will be removed.
+    * `--output-with-urls`: if you provided URLs in the `input-file` and you want to show them in the results instead of the paths, this option must be set. If this option is set, `--gold-standard PATH` will be expected to contain URLs instead of the paths to the documents.
+    * `--process-max-entries N`: max. number of entries to process from the `input-file`.
+  * Other (`faiss` docalign strategy):
+    * `--faiss-threshold F`: if the score of a match does not reach the provided threshold, it will be discarded.
+    * `--faiss-reverse-direction`: instead of going from `src-lang` to `trg-lang` we go from `trg-lang` to `src-lang`.
+    * `--faiss-take-knn N`: number of documents to check the distance from one document of `src-lang` to `trg-lang`.
+  * Other (logging):
+    * `--logging-level N`: level of logging to show the different lines related to a concrete severity. The more verbose value is a value of 0, but the default value is to only show the necessary information (warning and above).
+    * `--log-file PATH`: log file where all the logging entries will be stored. Even if this option is set, the logging entries will be showed up in the standar error output (if you want to remove those lines, you will need to redirect the standar error output).
 
 ## Example
 
