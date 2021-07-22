@@ -28,7 +28,7 @@ def main(args):
         raise Exception("the percentages have to be values in the range [0.0, 1.0]")
 
     if perc2 < 1.0:
-        logging.warning(f"using {perc2 * 100.0:.2f}% of the total samples, what means that if the order is not the same in both sides, likely the recall will not be 100%")
+        logging.warning(f"Using {perc2 * 100.0:.2f}% of the total samples, what means that if the order is not the same in both sides, likely the recall will not be 100%")
 
     files1 = listdir(dir1)
     files2 = listdir(dir2)
@@ -37,7 +37,7 @@ def main(args):
 
     for f in files1:
         if f == "urls.txt":
-            logging.info("skipping (1) 'urls.txt'")
+            logging.info("Skipping (1) 'urls.txt'")
             continue
 
         lang = f.split(lsep)[fsp1]
@@ -49,7 +49,7 @@ def main(args):
 
     for f in files2:
         if f == "urls.txt":
-            logging.info("skipping (2) 'urls.txt'")
+            logging.info("Skipping (2) 'urls.txt'")
             continue
 
         lang = f.split(lsep)[fsp2]
@@ -60,7 +60,7 @@ def main(args):
         files_per_lang[lang]["f2"].append(f)
 
     if opt1 != opt2:
-        logging.warning("likely, there will not be identical records since the embeddings are using different optimization strategies")
+        logging.warning("Likely, there will not be identical records since the embeddings are using different optimization strategies")
 
     for l in files_per_lang:
         len1 = len(files_per_lang[l]['f1'])
@@ -70,10 +70,10 @@ def main(args):
         identical = 0
         at_least_one_match_all_embeddings = True
 
-        logging.info(f"detected lang {l}: {len1} (processing {int(len1 * perc1)}) vs {len2} (processing {int(len2 * perc2)})")
+        logging.info(f"Detected lang {l}: {len1} (processing {int(len1 * perc1)}) vs {len2} (processing {int(len2 * perc2)})")
 
         if len1 != len2:
-            logging.warning(f"not same quantity of embeddings for lang. {l}")
+            logging.warning(f"Not same quantity of embeddings for lang. {l}")
 
         files_1 = files_per_lang[l]['f1'][:int(len1 * perc1)]
         files_2 = files_per_lang[l]['f2'][:int(len2 * perc2)]
@@ -94,7 +94,7 @@ def main(args):
                 if (m and cont):
                     break
 
-            logging.debug(f"files processed: {idx + 1} of {len(files_1)} ({(idx + 1) * 100.0 / len(files_1):.2f}%)")
+            logging.debug(f"Files processed: {idx + 1} of {len(files_1)} ({(idx + 1) * 100.0 / len(files_1):.2f}%)")
 
             if not m:
                 at_least_one_match_all_embeddings = False

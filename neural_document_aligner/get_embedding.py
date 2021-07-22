@@ -8,113 +8,49 @@ import tempfile
 import subprocess
 import numpy as np
 
+from sentence_transformers import SentenceTransformer, util
+
 import utils.embedding_util as embedding_util
+import constants
 
-DEFAULT_EMBEDDING_DIM = 1024
-
-# get LASER path
-if os.environ.get("LASER") is None:
-    raise Exception("environment variable LASER not set")
-
-LASER = os.environ['LASER']
-
-def get_embedding(embedding_file, dim=DEFAULT_EMBEDDING_DIM, optimization_strategy=None):
+def get_embedding(embedding_file, dim=constants.DEFAULT_EMBEDDING_DIM, optimization_strategy=None):
     embedding = embedding_util.load(embedding_file, dim=dim, strategy=optimization_strategy)
 
     return embedding
 
-def get_embedding_from_laser(input_file, lang, output_fifo_filename="laser_embeddings", optimization_strategy=None,
-                             dim=DEFAULT_EMBEDDING_DIM, verbose=False, content=None, embed_script_path=None):
-    if ((input_file is None and content is None) or
-        (input_file is not None and content is not None)):
-        raise Exception("you have to provide the data either with an input file or with the content itself")
-
-    file_desc = None
-
-    if input_file == "-":
-        cat = subprocess.Popen(["cat"], stdin=sys.stdin, stdout=subprocess.PIPE)
-    elif input_file is not None:
-        file_desc = open(input_file, "r")
-        cat = subprocess.Popen(["cat"], stdin=file_desc, stdout=subprocess.PIPE)
-
-    laser_encoder = f"{LASER}/models/bilstm.93langs.2018-12-26.pt"
-    laser_bpe_codes = f"{LASER}/models/93langs.fcodes"
-
-    tmpdir = tempfile.mkdtemp()
-    fifo_filename = os.path.join(tmpdir, output_fifo_filename)
-
+def get_embedding_from_sentence_transformer(list_of_sentences, optimization_strategy=None, model=constants.DEFAULT_EMBEDDING_DIM):
     try:
-        os.mkfifo(fifo_filename)
-    except OSError as e:
-        logging.error(str(e))
-        logging.error(f"could not create the FIFO '{output_fifo_filename}' (returning all zeros with size {dim})")
+        model = SentenceTransformer(model)
+    except Exception as e:
+        raise Exception(f"could not load the model '{model}' (maybe is not in the list of available models of 'sentence_transformers')") from e
 
-        emb = np.zeros(dim, dtype=np.float32)
-
-        if optimization_strategy is not None:
-            return embedding_util.get_optimized_embedding(emb, optimization_strategy)
-
-        return emb
-
-    logging.info(f"using FIFO '{fifo_filename}'")
-
-    embedding = b""
-    embed_script_path = f"{LASER}/source/embed.py" if embed_script_path is None else embed_script_path
-
-    popen_command = ["python3", embed_script_path,
-                    "--encoder", laser_encoder,
-                    "--token-lang", lang,
-                    "--bpe-codes", laser_bpe_codes,
-                    "--output", fifo_filename,
-                    "--np-savetxt"]
-
-    laser = subprocess.Popen(popen_command, stdin=cat.stdout)
-
-    fifo = open(fifo_filename, "r") # Waits until FIFO is opened to write
-    value = True
-
-    # Read until the process finishes
-    while laser.poll() is None:
-        value = fifo.buffer.read()
-
-        if not value:
-            continue
-
-        embedding += value
-
-    fifo.close()
-    os.remove(fifo_filename)
-    os.rmdir(tmpdir)
-
-    if file_desc is not None:
-        file_desc.close()
-
-    embedding = np.fromstring(embedding, dtype=np.float32, sep="\n")
-    embedding.resize(embedding.shape[0] // dim, dim)
+    embeddings = model.encode(list_of_sentences)
 
     # Embedding optimization
     if optimization_strategy is not None:
-        embedding = embedding_util.get_optimized_embedding(embedding, optimization_strategy)
+        embeddings = embedding_util.get_optimized_embedding(embeddings, strategy=optimization_strategy)
 
-    return embedding
+    return embeddings
 
-def generate_and_store_embeddings(input, output, lang, no_sentences, optimization_strategy=None, embed_script_path=None):
-    total_no_sentences = np.sum(no_sentences)
+def generate_and_store_embeddings(input, outputs, no_sentences, optimization_strategy=None, input_is_list_of_sentences=False, model=constants.DEFAULT_EMBEDDING_DIM):
+    list_of_sentences = input
 
-    embedding = get_embedding_from_laser(input, lang, optimization_strategy=optimization_strategy, embed_script_path=embed_script_path)
+    if not input_is_list_of_sentences:
+        list_of_sentences = []
 
-    if embedding.shape[0] != total_no_sentences:
-        logging.warning(f"the resulting embedding length ({embedding.shape[0]}) mismatches with the number of sentences ({total_no_sentences}). Writting all embeddings in just one file: '{output[0]}.merged'")
+        with open(input, "r") as f:
+            for line in f:
+                list_of_sentences.append(line.strip())
 
-        embedding.tofile(f"{output[0]}.merged")
-    else:
-        previous = 0
+    embeddings = get_embedding_from_sentence_transformer(list_of_sentences, optimization_strategy=optimization_strategy, model=model)
 
-        for no_s, o in zip(no_sentences, output):
-            e = embedding[previous:previous + no_s]
-            previous += no_s
+    previous = 0
 
-            e.tofile(o)
+    for no_sent, output in zip(no_sentences, outputs):
+        emb = embeddings[previous:previous + no_sent]
+        previous += no_sent
 
-        if embedding.shape[0] != previous:
-            logging.warning("once the embedding has been stored, the length seems to mismatch")
+        emb.tofile(output)
+
+    if embeddings.shape[0] != previous:
+        logging.warning("Once the embedding has been stored, the length seems to mismatch")

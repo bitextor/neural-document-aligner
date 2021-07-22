@@ -20,25 +20,24 @@ import generate_embeddings as gen_embeddings
 import evaluate
 import levenshtein
 from exceptions import FileFoundError
+import constants
 
-DEFAULT_EMBEDDING_DIM = 1024
-
-def generate_embeddings(docs, embedding_files, lang, they_should_exist=True, optimization_strategy=None, embed_script_path=None):
+def generate_embeddings(docs, embedding_files, lang, they_should_exist=True, optimization_strategy=None, model=None):
     for idx, embedding in enumerate(embedding_files):
         # Check if the embeddings either should or not exist
         if os.path.isfile(embedding) != they_should_exist:
             if they_should_exist:
-                logging.error(f"embedding #{idx} should exist but it does not")
+                logging.error(f"Embedding #{idx} should exist but it does not")
                 raise FileNotFoundError(embedding)
             else:
-                logging.error(f"embedding #{idx} should not exist but it does")
+                logging.error(f"Embedding #{idx} should not exist but it does")
                 raise FileFoundError(embedding)
 
     if not they_should_exist:
         # Generate embeddings because they should not exist
-        gen_embeddings.process(docs, [lang] * len(docs), embedding_files, optimization_strategy=optimization_strategy, embed_script_path=embed_script_path)
+        gen_embeddings.process(docs, [lang] * len(docs), embedding_files, optimization_strategy=optimization_strategy, model=model)
 
-def get_embedding_vectors(embedding_file, dim=DEFAULT_EMBEDDING_DIM, optimization_strategy=None):
+def get_embedding_vectors(embedding_file, dim=constants.DEFAULT_EMBEDDING_DIM, optimization_strategy=None):
     embedding = get_embedding.get_embedding(embedding_file, dim=dim, optimization_strategy=optimization_strategy)
 
     return embedding
@@ -89,7 +88,7 @@ def get_weights_sl(path, cnt=len):
         lengths_sum += counts[h] * lengths[h]
 
     if lengths_sum == 0:
-        logging.warning("empty or near-empty file -> not applying weights (i.e. weights = [1.0, ..., 1.0])")
+        logging.warning("Empty or near-empty file -> not applying weights (i.e. weights = [1.0, ..., 1.0])")
 
     file = open(path, "r")
 
@@ -210,7 +209,7 @@ def get_weights_slidf(paths, path, cnt=len):
     idf_weights = get_weights_idf(paths, path)
 
     if len(idf_weights) != len(sl_weights):
-        logging.warning(f"different length of idf weights ({len(idf_weights)}) and sl weights ({len(sl_weights)})")
+        logging.warning(f"Different length of idf weights ({len(idf_weights)}) and sl weights ({len(sl_weights)})")
 
     return sl_weights * idf_weights
 
@@ -224,11 +223,11 @@ def get_weights_slidf_all(paths, cnt=len):
         sl_weights.append(get_weights_sl(p, cnt))
 
     if len(idf_weights) != len(sl_weights):
-        logging.warning(f"different length of idf weights ({len(idf_weights)}) and sl weights ({len(sl_weights)})")
+        logging.warning(f"Different length of idf weights ({len(idf_weights)}) and sl weights ({len(sl_weights)})")
 
     for idx in range(len(sl_weights)):
         if len(sl_weights[idx]) != len(idf_weights[idx]):
-            logging.warning(f"different length of idf weights ({len(idf_weights)}) and sl weights ({len(sl_weights)}) for index {idx}, whose document should be '{paths[idx]}'")
+            logging.warning(f"Different length of idf weights ({len(idf_weights)}) and sl weights ({len(sl_weights)}) for index {idx}, whose document should be '{paths[idx]}'")
 
         results.append(sl_weights[idx] * idf_weights[idx])
 
@@ -268,7 +267,7 @@ def weight_embeddings(embeddings, paths, weights_strategy=0):
 #    weights = np.array(weights)
 
     if len(embeddings) != len(weights):
-        logging.warning(f"shapes between embeddings and weights do not match ({len(embeddings)} vs {len(weights)}), so no weights are going to be applied")
+        logging.warning(f"Shapes between embeddings and weights do not match ({len(embeddings)} vs {len(weights)}), so no weights are going to be applied")
     else:
         # Apply weights
         for emb_idx, (embedding, weight) in enumerate(zip(embeddings, weights)):
@@ -276,7 +275,7 @@ def weight_embeddings(embeddings, paths, weights_strategy=0):
             weight = np.array(weight)
 
             if embs.shape[0] != weight.shape[0]:
-                logging.warning(f"shapes between embedding and weights do not match ({embs.shape[0]} vs {weight.shape[0]}), so no weights are going to be applied to the current embedding (idx {emb_idx})")
+                logging.warning(f"Shapes between embedding and weights do not match ({embs.shape[0]} vs {weight.shape[0]}), so no weights are going to be applied to the current embedding (idx {emb_idx})")
                 continue
 
             for idx in range(len(embs)):
@@ -286,7 +285,7 @@ def weight_embeddings(embeddings, paths, weights_strategy=0):
 
     return embeddings
 
-def merge_embedding(doc_embeddings, merging_strategy=0, dim=DEFAULT_EMBEDDING_DIM):
+def merge_embedding(doc_embeddings, merging_strategy=0, dim=constants.DEFAULT_EMBEDDING_DIM):
     result = None
 
     if merging_strategy == 0:
@@ -307,7 +306,7 @@ def merge_embedding(doc_embeddings, merging_strategy=0, dim=DEFAULT_EMBEDDING_DI
 
     return result
 
-def max_split3_embedding(embedding, dim=DEFAULT_EMBEDDING_DIM):
+def max_split3_embedding(embedding, dim=constants.DEFAULT_EMBEDDING_DIM):
     result = []
     idxs = [len(embedding)]
 
@@ -337,7 +336,7 @@ def max_split3_embedding(embedding, dim=DEFAULT_EMBEDDING_DIM):
             last_idx = idx
 
     if len(result) != dim * 3:
-        logging.warning(f"unexpected size of result in max_split3_embedding ({len(result)})")
+        logging.warning(f"Unexpected size of result in max_split3_embedding ({len(result)})")
 
     return np.float32(result)
 
@@ -521,7 +520,7 @@ def get_docs(path, max_nodocs=None, iso88591=False):
             del docs
             del urls
 
-            logging.warning(f"trying with ISO-8859-1 encoding")
+            logging.warning(f"Trying with ISO-8859-1 encoding")
 
             return get_docs(path, max_nodocs, True)
 
@@ -549,7 +548,7 @@ def process_input_file(args, max_noentries=None):
     for idx, line in enumerate(data_src):
 #        for idx, line in enumerate(lines):
         if (max_noentries and idx >= max_noentries):
-            logging.debug(f"max. number of lines to process from the input file has been reached ({idx} lines processed from '{input_file}')")
+            logging.debug(f"Max. number of lines to process from the input file has been reached ({idx} lines processed from '{input_file}')")
             break
 
         line = line.strip().split("\t")
@@ -558,13 +557,13 @@ def process_input_file(args, max_noentries=None):
             # Expected format: doc\tembedding_file\turl_or_dash\t<src|trg>
 
             if len(line) != 4:
-                logging.warning(f"unexpected format in line #{idx + 1} (it will be skipped)")
+                logging.warning(f"Unexpected format in line #{idx + 1} (it will be skipped)")
                 continue
 
             src_or_trg = line[3].lower()
 
             if src_or_trg not in ("src", "trg"):
-                logging.warning(f"unexpected format in line #{idx + 1} (it will be skipped)")
+                logging.warning(f"Unexpected format in line #{idx + 1} (it will be skipped)")
                 continue
 
             docs_vector = src_docs
@@ -589,7 +588,7 @@ def process_input_file(args, max_noentries=None):
             # Default format: src_doc\ttrg_doc\tsrc_embedding_file\ttrg_embedding_file\tsrc_url_or_dash\ttrg_url_or_dash
 
             if len(line) != 6:
-                logging.warning(f"unexpected format in line #{idx + 1} (it will be skipped)")
+                logging.warning(f"Unexpected format in line #{idx + 1} (it will be skipped)")
                 continue
 
             src_docs.append(utils.expand_and_real_path_and_exists(line[0], raise_exception=True))
@@ -668,7 +667,7 @@ def preprocess(src_docs, trg_docs, src_embeddings, trg_embeddings, src_embedding
                 remove_idxs.insert(0, idx)
 
         remove_idxs_str = ' '.join(map(str, remove_idxs))
-        logging.debug(f"elements filtered by heuristics (idxs): {'-' if remove_idxs_str == '' else remove_idxs_str}")
+        logging.debug(f"Elements filtered by heuristics (idxs): {'-' if remove_idxs_str == '' else remove_idxs_str}")
 
         for idx in remove_idxs:
             src_docs.pop(idx)
@@ -695,7 +694,7 @@ def preprocess(src_docs, trg_docs, src_embeddings, trg_embeddings, src_embedding
     # Merge embeddings
     if "merging_strategy" in kwargs:
         merging_strategy = kwargs["merging_strategy"]
-        dim = kwargs["dim"] if "dim" in kwargs else DEFAULT_EMBEDDING_DIM
+        dim = kwargs["dim"] if "dim" in kwargs else constants.DEFAULT_EMBEDDING_DIM
 
         if (not "do_not_merge_on_preprocessing" in kwargs or not kwargs["do_not_merge_on_preprocessing"]):
             # Merge src and trg embeddings
@@ -705,7 +704,7 @@ def preprocess(src_docs, trg_docs, src_embeddings, trg_embeddings, src_embedding
 
     # Apply random mask to embeddings
     if ("random_mask_value" in kwargs and kwargs["random_mask_value"]):
-        logging.info(f"using provided random mask")
+        logging.info(f"Using provided random mask")
 
         mask = kwargs["random_mask_value"].split(',')
         mask = np.float32(list(map(lambda x: np.float32(x), mask)))
@@ -721,7 +720,7 @@ def preprocess(src_docs, trg_docs, src_embeddings, trg_embeddings, src_embedding
             if (len(embeddings) != 0 and embeddings_dim != len(mask)):
                 raise Exception(f"{label} embeddings shape and mask mismatch ({embeddings_dim} vs {len(mask)})")
 
-        logging.debug(f"first elements of the provided mask ({min(len(mask), 5)} elements of {len(mask)}): {mask[0:min(len(mask), 5)]} ...")
+        logging.debug(f"First elements of the provided mask ({min(len(mask), 5)} elements of {len(mask)}): {mask[0:min(len(mask), 5)]} ...")
 
         # Apply
         for embeddings in (src_embeddings, trg_embeddings):
@@ -730,11 +729,11 @@ def preprocess(src_docs, trg_docs, src_embeddings, trg_embeddings, src_embedding
     return src_docs, trg_docs, src_embeddings, trg_embeddings, src_embedding_files, trg_embedding_files, src_urls, trg_urls
 
 def get_faiss(src_docs, trg_docs, src_embeddings, trg_embeddings, take_knn=5, faiss_reverse_direction=False,
-              dim=DEFAULT_EMBEDDING_DIM, threshold=None):
+              dim=constants.DEFAULT_EMBEDDING_DIM, threshold=None):
     results = []
 
-    logging.info(f"dimensionality: {dim}")
-    logging.info(f"using {take_knn} as neighbourhood size (knn)")
+    logging.info(f"Dimensionality: {dim}")
+    logging.info(f"Using {take_knn} as neighbourhood size (knn)")
 
     # Create faiss index
     faiss_index = faiss.IndexFlatIP(dim)
@@ -767,10 +766,10 @@ def get_faiss(src_docs, trg_docs, src_embeddings, trg_embeddings, take_knn=5, fa
     faiss.normalize_L2(src_embedding_vectors)
     faiss.normalize_L2(trg_embedding_vectors)
 
-    if src_embedding_vectors.dtype == np.object:
-        logging.warning(f"detected incorrect src embeddings (likely some of them were not correctly calculated)")
-    if trg_embedding_vectors.dtype == np.object:
-        logging.warning(f"detected incorrect trg embeddings (likely some of them were not correctly calculated)")
+    if src_embedding_vectors.dtype == object:
+        logging.warning(f"Detected incorrect src embeddings (likely some of them were not correctly calculated)")
+    if trg_embedding_vectors.dtype == object:
+        logging.warning(f"Detected incorrect trg embeddings (likely some of them were not correctly calculated)")
 
     faiss_index.add(src_embedding_vectors)
 
@@ -784,13 +783,13 @@ def get_faiss(src_docs, trg_docs, src_embeddings, trg_embeddings, take_knn=5, fa
                 trg_docs[idx]
                 src_docs[i[idx2]]
             except IndexError as e:
-                logging.warning(f"{str(e)} (skipping this result)")
+                logging.warning(f"Skipping this result: {str(e)}")
                 continue
 
             result_faiss = D[idx][idx2]
 
             if result_faiss >= 1.0 + sys.float_info.epsilon:
-                logging.warning(f"faiss normalization not working well ({result_faiss})?")
+                logging.warning(f"Faiss normalization not working well ({result_faiss})?")
 
             result_faiss = min(result_faiss, 1.0)
 
@@ -827,7 +826,7 @@ def get_lev(src_embeddings, trg_embeddings, src_docs, trg_docs, noprocesses=0, n
 
     # Multiprocessing
     if noprocesses > 0:
-        logging.info(f"multiprocessing: using {noprocesses} processes and {noworkers} workers")
+        logging.info(f"Multiprocessing: using {noprocesses} processes and {noworkers} workers")
 
         src_idx = 0
         trg_idx = 0
@@ -897,7 +896,7 @@ def get_distance(src_embeddings, trg_embeddings, src_docs, trg_docs, noprocesses
 
     # Multiprocessing
     if noprocesses > 0:
-        logging.info(f"multiprocessing: using {noprocesses} processes and {noworkers} workers")
+        logging.info(f"Multiprocessing: using {noprocesses} processes and {noworkers} workers")
 
         src_idx = 0
         trg_idx = 0
@@ -977,7 +976,7 @@ def main(args):
     results_strategy = args.results_strategy
     do_not_merge_on_preprocessing = args.do_not_merge_on_preprocessing
     generate_and_finish = args.generate_and_finish
-    embed_script_path = args.embed_script_path
+    model = args.model
 
     # Configure logging
     utils.set_up_logging(level=args.logging_level, filename=args.log_file)
@@ -987,24 +986,24 @@ def main(args):
         process_input_file(args, max_noentries)
 
     if weights_strategy != 0:
-        logging.info(f"weights strategy: {weights_strategy}")
+        logging.info(f"Weights strategy: {weights_strategy}")
 
-    logging.info(f"merging strategy: {merging_strategy}")
+    logging.info(f"Merging strategy: {merging_strategy}")
 
     if noworkers <= 0:
         noworkers = 10
-        logging.warning(f"changing 'workers' value to {workers}. A non-valid value was provided")
+        logging.warning(f"Changing 'workers' value to {workers} (a non-valid value was provided)")
     if not gold_standard:
         gold_standard = None
 
     # Generate embeddings (if needed)
     generate_embeddings(src_docs, src_embedding_files, args.src_lang, they_should_exist=not generate_embeddings_arg,
-                        optimization_strategy=gen_emb_optimization_strategy, embed_script_path=embed_script_path)
+                        optimization_strategy=gen_emb_optimization_strategy, model=model)
     generate_embeddings(trg_docs, trg_embedding_files, args.trg_lang, they_should_exist=not generate_embeddings_arg,
-                        optimization_strategy=gen_emb_optimization_strategy, embed_script_path=embed_script_path)
+                        optimization_strategy=gen_emb_optimization_strategy, model=model)
 
     if generate_and_finish:
-        logging.info("the embeddings have been generated and the execution is going to finish")
+        logging.info("The embeddings have been generated and the execution is going to finish")
         return
 
     src_embeddings = []
@@ -1027,11 +1026,11 @@ def main(args):
             nolines = utils.get_nolines(doc)
 
             if nolines == 0:
-                logging.warning(f"file with 0 lines ({label} - {idx}): '{doc}'")
+                logging.warning(f"File with 0 lines ({label} - {idx}): '{doc}'")
             if len(embedding.shape) != 2:
                 raise Exception(f"unexpected shape of embedding ({label} - {idx}). Expected shape is 2: doc with sentences * dim. Actual shape: {len(embedding.shape)}")
             if embedding.shape[0] == 0:
-                logging.warning(f"embedding with 0 elements ({label} - {idx})")
+                logging.warning(f"Embedding with 0 elements ({label} - {idx})")
             if nolines != embedding.shape[0]:
                 raise Exception(f"unexpected number of setences ({label} - {idx}). Expected sentences are {nolines}. Actual number of sentences: {embedding.shape[0]}")
             if embedding.shape[1] != dim:
@@ -1045,7 +1044,7 @@ def main(args):
                    apply_heuristics=args.apply_heuristics, input_src_and_trg_splitted=args.input_src_and_trg_splitted)
 
     if (len(src_embeddings) == 0 or len(trg_embeddings) == 0):
-        logging.warning("there are not embeddings in both src and trg")
+        logging.warning("There are not embeddings in both src and trg")
         return
 
     # Fix dim if necessary
@@ -1057,9 +1056,9 @@ def main(args):
         embeddings_dim = len(trg_embeddings[0][0]) if (len(trg_embeddings) > 0 and len(trg_embeddings[0]) > 0 and embeddings_dim is None) else embeddings_dim
 
     if (embeddings_dim is None and not generate_embeddings_arg):
-        logging.warning(f"could not infer the dimension of the embeddings")
+        logging.warning(f"Could not infer the dimension of the embeddings")
     elif (embeddings_dim != dim and embeddings_dim is not None):
-        logging.info(f"dimension updated from {dim} to {embeddings_dim}")
+        logging.info(f"Dimension updated from {dim} to {embeddings_dim}")
         dim = embeddings_dim
 
     # Docalign, results and, optionally, evaluation
@@ -1079,7 +1078,7 @@ def main(args):
         # TODO filter here
 
         if results_strategy == 0:
-            logging.info(f"results: get the best {faiss_take_knn} matches from src to trg docs, sort by score and do not select the either of the two docs again")
+            logging.info(f"Results: get the best {faiss_take_knn} matches from src to trg docs, sort by score and do not select the either of the two docs again")
 
             for r in urls_aligned_faiss:
                 print(f"{r[0]}\t{r[1]}")
@@ -1096,7 +1095,7 @@ def main(args):
         union_and_int_lev = union_and_intersection(urls_aligned_lev) if urls_aligned_lev else None
 
         if results_strategy == 0:
-            logging.info(f"results: union of best matches from src to trg and from trg to src")
+            logging.info(f"Results: union of best matches from src to trg and from trg to src")
 
             for r in union_and_int_lev["union"]:
                 print(f"{r[0]}\t{r[1]}")
@@ -1106,7 +1105,7 @@ def main(args):
                 print(f"recall, precision: {recall}, {precision}")
 
         elif results_strategy == 1:
-            logging.info(f"results: intersection of best matches from src to trg and trg to src")
+            logging.info(f"Results: intersection of best matches from src to trg and trg to src")
 
             for r in union_and_int_lev["intersection"]:
                 print(f"{r[0]}\t{r[1]}")
@@ -1122,7 +1121,7 @@ def main(args):
         union_and_int_avg = union_and_intersection(urls_aligned_avg) if urls_aligned_avg else None
 
         if results_strategy == 0:
-            logging.info(f"results: union of best matches from src to trg and from trg to src\n")
+            logging.info(f"Results: union of best matches from src to trg and from trg to src\n")
 
             for r in union_and_int_avg["union"]:
                 print(f"{r[0]}\t{r[1]}")
@@ -1132,7 +1131,7 @@ def main(args):
                 print(f"recall, precision: {recall}, {precision}")
 
         elif results_strategy == 1:
-            logging.info(f"results: intersection of best matches from src to trg and trg to src")
+            logging.info(f"Results: intersection of best matches from src to trg and trg to src")
 
             for r in union_and_int_avg["intersection"]:
                 print(f"{r[0]}\t{r[1]}")
@@ -1190,14 +1189,14 @@ if __name__ == '__main__':
         help='Number of workers to use in order to parallelize')
 
     # Embedding configuration
-    parser.add_argument('--dim', default=DEFAULT_EMBEDDING_DIM, type=int, metavar='N',
+    parser.add_argument('--model', metavar='MODEL', default=None,
+        help=f'Model to use from \'sentence_transformers\'. The default model is \'{constants.DEFAULT_ST_MODEL}\'')
+    parser.add_argument('--dim', default=constants.DEFAULT_EMBEDDING_DIM, type=int, metavar='N',
         help='Dimensionality of the provided embeddings')
     parser.add_argument('--generate-embeddings', action="store_true",
         help='The embeddings provided in the input file will be generated. If the provided path of an embedding exists, it will be overwritten')
     parser.add_argument('--generate-and-finish', action="store_true",
         help='Generate the embeddings and finish the exit')
-    parser.add_argument('--embed-script-path', metavar='PATH', default=f'{os.path.realpath(__file__).rpartition("/")[0]}/LASER/source/embed.py',
-        help=f'Path to the script embed.py from LASER which will be used in order to generate the embeddings. The default value is \'{os.path.realpath(__file__).rpartition("/")[0]}/LASER/source/embed.py\'')
     parser.add_argument('--random-mask-value', metavar='<v_1>,<v_2>,...,<v_dim>',
         help='Random mask value. The expected format is: <value_1>,<value_2>,...,<value_n> (n=embeddings dim)')
     parser.add_argument('--check-zeros-mask', action="store_true",
@@ -1226,8 +1225,8 @@ if __name__ == '__main__':
     parser.add_argument('--faiss-take-knn', default=5, metavar='N', type=int,
         help='Indicates the size of the neighbourhood when using faiss')
     ## Logging
-    parser.add_argument('--logging-level', metavar='N', type=int, default=30,
-                        help='Logging level. Default value is 10, which is WARNING')
+    parser.add_argument('--logging-level', metavar='N', type=int, default=constants.DEFAULT_LOGGING_LEVEL,
+                        help=f'Logging level. Default value is {constants.DEFAULT_LOGGING_LEVEL}')
     parser.add_argument('--log-file', metavar='PATH', default=None,
                         help='Log file where all the log entries will be stored')
 

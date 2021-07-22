@@ -4,7 +4,7 @@ import logging
 
 import numpy as np
 
-DEFAULT_EMBEDDING_DIM = 1024
+DEFAULT_EMBEDDING_DIM = 768
 
 strategy_2_bits = 8
 strategy_2_bins = (np.array(range(2 ** strategy_2_bits - 1), dtype=np.float32) - (2 ** strategy_2_bits - 1) // 2) / ((2 ** strategy_2_bits) / 2)
@@ -37,17 +37,17 @@ def get_original_embedding_from_optimized(embedding=None, file=None, dim=DEFAULT
             else:
                 embedding = np.fromfile(file, dtype=np.uint8, count=-1)
         else:
-            logging.error(f"unknown optimization strategy ({strategy}): returning None")
+            logging.error(f"Unknown optimization strategy ({strategy}): returning None")
             return None
 
         x = embedding
 
     # Sanity check
     if len(embedding.shape) != 1:
-        logging.error(f"unexpected shape ({embedding.shape}). Returning None")
+        logging.error(f"Unexpected shape ({embedding.shape}). Returning None")
         return None
     if (embedding.shape[0] == 0 or embedding.shape[0] % dim != 0):
-        logging.error(f"unexpected shape ({embedding.shape}): 0 or not mod {dim}: returning None")
+        logging.error(f"Unexpected shape ({embedding.shape}): 0 or not mod {dim}: returning None")
         return None
 
     if not file:
@@ -59,7 +59,7 @@ def get_original_embedding_from_optimized(embedding=None, file=None, dim=DEFAULT
         # vector quantization (range [-1., 1.])
         x = strategy_2_bins_recover[x].astype(np.float32)
     else:
-        logging.error(f"unknown optimization strategy: returning None")
+        logging.error(f"Unknown optimization strategy: returning None")
         return None
 
     return x
@@ -74,7 +74,7 @@ def compare(x, y, atol=1.0, rtol=1e-4, verbose=True):
 
     if verbose:
         if not close:
-            logging.warning(f"too much precision lost due to optimization (rtol of {rtol} vs {rclose}; atol of {atol} vs {aclose})")
+            logging.warning(f"Too much precision lost due to optimization (rtol of {rtol} vs {rclose}; atol of {atol} vs {aclose})")
         else:
             logging.info(f"{{aclose: {aclose}, rclose: {rclose}}}")
 
@@ -106,7 +106,7 @@ def get_optimized_embedding(embedding, strategy=1):
         # linear quantization (range [-1., 1.])
         x = np.digitize(x, strategy_2_bins).astype(np.uint8)
     else:
-        logging.warning(f"unknown optimization strategy ({strategy}): returning embedding without any optimization strategy applied")
+        logging.warning(f"Unknown optimization strategy ({strategy}): returning embedding without any optimization strategy applied")
 
     return x
 
@@ -115,10 +115,10 @@ def store(embedding, file, strategy=None):
     x = embedding.copy()
 
     if (x.dtype != np.float64 and x.dtype != np.float32 and x.dtype != np.float16):
-        logging.error(f"unexpected data type ({x.dtype})")
+        logging.error(f"Unexpected data type ({x.dtype})")
         return
     if len(x.shape) != 2:
-        logging.error(f"unexpected shape ({x.shape})")
+        logging.error(f"Unexpected shape ({x.shape})")
         return
 
     x.resize(x.shape[0] * x.shape[1])
@@ -133,7 +133,7 @@ def store(embedding, file, strategy=None):
 
 def test_precision(embedding, strategy, dim=DEFAULT_EMBEDDING_DIM, return_optimized_embedding=False):
     if len(embedding.shape) != 2:
-        logging.error(f"unexpected shape ({embedding.shape})")
+        logging.error(f"Unexpected shape ({embedding.shape})")
         return None
 
     x = embedding.copy()
@@ -145,7 +145,7 @@ def test_precision(embedding, strategy, dim=DEFAULT_EMBEDDING_DIM, return_optimi
 
     acc_rerr = np.sum(np.abs(x - embedding))
 
-    logging.info(f"accumulated relative error (lost precision): {acc_rerr} (avg: {acc_rerr / (x.shape[0] * x.shape[1])})")
+    logging.info(f"Accumulated relative error (lost precision): {acc_rerr} (avg: {acc_rerr / (x.shape[0] * x.shape[1])})")
 
     if return_optimized_embedding:
         return compare(x, embedding), x

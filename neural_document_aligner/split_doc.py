@@ -19,7 +19,7 @@ def split(doc_path, lang, output=None, text=None):
         output = utils.expand_and_real_path_and_exists(output)
 
         if os.path.exists(output):
-            logging.error(f"file '{output}' exists\n")
+            logging.error(f"File '{output}' exists\n")
 
             return 3, None
 
@@ -65,7 +65,7 @@ def split(doc_path, lang, output=None, text=None):
             status = os.system(f"cat {doc_path}")
 
         if status != 0:
-            logging.error(f"could not write the file to output (status of executed command: {status})")
+            logging.error(f"Could not write the file to output (status of executed command: {status})")
 
             return 2, text if text is not None else ""
         return 1, text if text is not None else ""

@@ -29,19 +29,6 @@ pip3 install --upgrade pip
 pip3 install -r requirements.txt
 ```
 
-### Dependencies
-
-In order to run the neural document aligner we will need to have installed [LASER](https://github.com/facebookresearch/LASER).
-
-As it is explained in the [installation of LASER](https://github.com/facebookresearch/LASER#installation), the environment variable `LASER` is expected to be defined, and we also need this configuration. Run:
-
-```bash
-export LASER="/path/to/LASER"
-
-# Optionally
-echo "export LASER='/path/to/LASER'" >> ~/.bashrc
-```
-
 ## Usage
 
 You can easily check the different options running:
@@ -60,10 +47,10 @@ usage: neural_document_aligner.py [-h]
                                   [--results-strategy N]
                                   [--gen-emb-optimization-strategy {0,1,2}]
                                   [--emb-optimization-strategy {0,1,2}]
-                                  [--processes N] [--workers N] [--dim N]
+                                  [--processes N] [--workers N]
+                                  [--model MODEL] [--dim N]
                                   [--generate-embeddings]
                                   [--generate-and-finish]
-                                  [--embed-script-path PATH]
                                   [--random-mask-value <v_1>,<v_2>,...,<v_dim>]
                                   [--check-zeros-mask] [--min-sanity-check N]
                                   [--input-src-and-trg-splitted]
@@ -111,7 +98,7 @@ As a step of the preprocessing, different strategies can be applied to weight th
 
 #### Merge embeddings
 
-As another step of the preprocessing, different strategies can be applied to merge the sentence-level embedding obtained from LASER and get a document-level embedding. Sometimes, the document alignment strategy will apply its own merging strategy because needs information which we do not have in the processing step, and in this case, we can use `--do-not-merge-on-preprocessing` (anyway, the merging strategy may reach, optionally, to the document alignment strategy, and different merging strategies may be applied, just after, not at the preprocessing step). The available strategies at the preprocessing step are:
+As another step of the preprocessing, different strategies can be applied to merge the sentence-level embedding and get a document-level embedding. Sometimes, the document alignment strategy will apply its own merging strategy because needs information which we do not have in the processing step, and in this case, we can use `--do-not-merge-on-preprocessing` (anyway, the merging strategy may reach, optionally, to the document alignment strategy, and different merging strategies may be applied, just after, not at the preprocessing step). The available strategies at the preprocessing step are:
 
 1. Do not apply any merging strategy. This strategy can be applied with `--merging-strategy 0`.
 2. Merge embeddings using the average value of the components. This strategy can be applied with `--merging-strategy 1`.
@@ -169,10 +156,10 @@ There are different parameters in order to achieve different behaviours:
     * `--processes N`: number of processes to use if multiprocessing is possible (is possible in the docalign strategies `lev`, `lev-full` and `just-merge`).
     * `--workers N`: number of workers to use if multiprocessing is possible (is possible in the docalign strategies `lev`, `lev-full` and `just-merge`).
   * Embeddings:
+    * `--model MODEL`: model which will be used to generate the embeddings using [Sentence Transformers](https://github.com/UKPLab/sentence-transformers) (the model **should** be multilingual). The selected model has to be available in [this list](https://www.sbert.net/docs/pretrained_models.html#sentence-embedding-models). The first time which you select a model, it will be downloaded.
     * `--dim N`: dimensionality of the embeddings. This value might change if you change your embeddings generation source or you apply different processes (e.g. embedding reduction).
     * `--generate-embeddings`: by default, the provided paths to the embeddings in the `input-file` are expected to exist. In the case that you want to generate the embeddings, this option must be set.
     * `--generate-and-finish`: if you just want to generate the embeddings and do not perform the matching of the documents, this option must be set to finish the execution once the embeddings have been generated.
-    * `--embed-script-path PATH`: path to the file `embed.py` of [LASER](https://github.com/facebookresearch/LASER). This parameter allows to change the default path, which is the one defined by the LASER installation. The default value is the file `embed.py` which is inside this repository (there are options which are not in the original LASER and are mandatory in order to generate correctly the embeddings). The reason about chanching this file is add different options to optimize the behaviour of LASER without necessary modify your LASER installation.
     * `--random-mask-value <v_1>,<v_2>,...,<v_dim>`: mask to apply to every embedding. If you have a mask which you know that it works better for a specific pair of languagues, you may apply it through this parameter. The expected values are float values.
     * `--check-zeros-mask`: if you want to remove the components of the embeddings which, after applying the mask, the result is 0, this option must be set.
   * Other:

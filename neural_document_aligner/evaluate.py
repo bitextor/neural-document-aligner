@@ -9,85 +9,7 @@ import numpy as np
 
 import levenshtein
 import utils.utils as utils
-
-def lev_opt(word1, word2, weight=1.0):
-    m = np.zeros((2, len(word2) + 1))
-
-    for idx1 in range(len(word1) + 1):
-        for idx2 in range(m.shape[1]):
-            if idx1 == 0:
-                m[idx1][idx2] = idx2 * weight
-                continue
-            if idx2 == 0:
-                m[1][idx2] = idx1 * weight
-                continue
-
-            diff = 0.0
-
-            if word1[idx1 - 1] != word2[idx2 - 1]:
-                diff = 1.0
-
-            m[1][idx2] = min(min(m[1][idx2 - 1] + 1.0 * weight, m[1 - 1][idx2] + 1.0 * weight), m[1 - 1][idx2 - 1] + diff * weight)
-        if idx1 != 0:
-            m[0] = m[1]
-
-    return m[-1][-1]
-
-def lev_opt_space_and_band(word1, word2, weight=1.0, percentage=0.06, early_stopping=0.05):
-    if (len(word1) < 10 or len(word2) < 10):
-        return lev_opt(word1, word2, weight)
-
-    m = np.ones((2, len(word2) + 1)) * np.inf
-    perc_cols = math.floor((len(word1) + 1) * percentage)
-    perc_rows = math.floor((len(word2) + 1) * percentage)
-
-    for i in range(m.shape[1]):
-        m[0][i] = i * weight
-
-    idx1 = 0
-    idx2 = 0
-    max_idx1 = len(word1) + 1
-    max_idx2 = m.shape[1]
-
-    while idx1 < max_idx1:
-        currently_iterated = idx1 / max_idx1 # [0, 1]
-        idx2 = max(0, math.floor(currently_iterated * max_idx2) - perc_cols)
-        idx2_limit = min(max_idx2, math.floor(currently_iterated * max_idx2) + perc_cols)
-
-        if (idx1 and idx2):
-            m[0][:idx2] = np.inf
-
-        while idx2 < idx2_limit:
-            if idx1 == 0:
-                m[idx1][idx2] = idx2 * weight
-                idx2 += 1
-                continue
-            if idx2 == 0:
-                m[1][idx2] = idx1 * weight
-                idx2 += 1
-                continue
-
-            diff = 0.0
-
-            if word1[idx1 - 1] != word2[idx2 - 1]:
-                diff = 1.0
-
-            m[1][idx2] = min(min(m[1][idx2 - 1] + 1.0 * weight, m[1 - 1][idx2] + 1.0 * weight), m[1 - 1][idx2 - 1] + diff * weight)
-
-            idx2 += 1
-
-        if idx1:
-            m[0] = m[1]
-
-            if min(idx1 * weight, min(m[0])) > early_stopping:
-                print(f"Early stopping: [{m[0][0]} ... {m[0][-1]}] (row: {idx1})")
-                return 1.0 # Early stopping
-
-        idx1 += 1
-
-    print(f"[{m[-1][0]} ... {m[-1][-1]}]")
-
-    return m[-1][-1]
+import constants
 
 def near_duplicates(url1, url2, docs_urls):
     if not docs_urls:
@@ -100,13 +22,13 @@ def near_duplicates(url1, url2, docs_urls):
         doc1_idx = docs_urls['urls'].index(url1)
         doc1 = docs_urls['docs'][doc1_idx]
     except:
-        logging.error(f"could not get url1 ({url1}) index because does not exist an asociated document")
+        logging.error(f"Could not get url1 ({url1}) index because does not exist an asociated document")
 
     try:
         doc2_idx = docs_urls['urls'].index(url2)
         doc2 = docs_urls['docs'][doc2_idx]
     except:
-        logging.error(f"could not get url2 ({url2}) index because does not exist an asociated document")
+        logging.error(f"Could not get url2 ({url2}) index because does not exist an asociated document")
 
     if (not doc1 or not doc2):
         return False
@@ -126,14 +48,14 @@ def near_duplicates(url1, url2, docs_urls):
     word1 = word1.rstrip()
     word2 = word2.rstrip()
 
-    if lev_opt_space_and_band(word1, word2, 1 / max(len(word1), len(word2))) < 0.05:
+    if levenshtein.levenshtein_opt_space_and_band(word1, word2, nfactor=max(len(word1), len(word2)), percentage=0.06)["value"] < 0.05:
         return True
 
     return False
 
 def process_gold_standard(gs, result, filter=None, docs_urls=None, soft_recall=False):
     if len(result) == 0:
-        logging.warning("there are no entries in the provided results")
+        logging.warning("There are no entries in the provided results")
         return 0.0, 0.0
 
     f = open(gs, "r")
@@ -171,7 +93,7 @@ def process_gold_standard(gs, result, filter=None, docs_urls=None, soft_recall=F
                     sr_res.add(r)
 
             if (pair1 in result or pair2 in result):
-                logging.debug(f"the pair ('{url1}', '{url2}') is in the provided results")
+                logging.debug(f"The pair ('{url1}', '{url2}') is in the provided results")
 
                 recall += 1
                 precision += 1
@@ -189,7 +111,7 @@ def process_gold_standard(gs, result, filter=None, docs_urls=None, soft_recall=F
 
                         # Check distance edition between url2 and sr_res_compare
                         if near_duplicates(url2, sr_res_compare, docs_urls):
-                            logging.debug(f"the pair ('{url1}', '{url2}') is in our results (soft recall)")
+                            logging.debug(f"The pair ('{url1}', '{url2}') is in our results (soft recall)")
 
                             recall += 1
                             precision += 1
@@ -202,17 +124,17 @@ def process_gold_standard(gs, result, filter=None, docs_urls=None, soft_recall=F
 
                         # Check distance edition between url1 and sr_res_compare
                         if near_duplicates(url2, sr_res_compare, docs_urls):
-                            logging.debug(f"the pair ('{url1}', '{url2}') is in our results (soft recall)")
+                            logging.debug(f"The pair ('{url1}', '{url2}') is in our results (soft recall)")
 
                             recall += 1
                             precision += 1
             nolines += 1
 
-    logging.info(f"number of lines which have been used ({filtered} filtered from the total, which is {nolines + filtered}): {nolines}")
-    logging.info(f"total results: {len(result)}")
+    logging.info(f"Number of lines which have been used ({filtered} filtered from the total, which is {nolines + filtered}): {nolines}")
+    logging.info(f"Total results: {len(result)}")
 
     if nolines == 0:
-        logging.warning("number of lines processed in gold standard is 0")
+        logging.warning("Number of lines processed in gold standard is 0")
         return 0.0, 0.0
 
     recall /= float(nolines)
@@ -264,7 +186,7 @@ def get_docs(path, max_nodocs=None, iso88591=False):
             del docs
             del urls
 
-            logging.warning(f"trying with ISO-8859-1 encoding")
+            logging.warning(f"Trying with ISO-8859-1 encoding")
 
             return get_docs(path, max_nodocs, True)
 
@@ -285,9 +207,9 @@ def main(args):
                 url2 = r[1]
 
                 if url1 not in docs_urls['urls']:
-                    logging.warning(f"url (1) '{url1}' not found in provided file which should contain all the URLs")
+                    logging.warning(f"Url (1) '{url1}' not found in provided file which should contain all the URLs")
                 if url2 not in docs_urls['urls']:
-                    logging.warning(f"url (2) '{url2}' not found in provided file which should contain all the URLs")
+                    logging.warning(f"Url (2) '{url2}' not found in provided file which should contain all the URLs")
 
     r, p = process_gold_standard(args.gold, results, None, docs_urls)
 
@@ -312,8 +234,8 @@ if __name__ == '__main__':
         help='Path to the file which contains all the pairs with docs and urls relation')
     parser.add_argument('--sanity-check', action='store_true',
         help='Perform sanity check, what increases the time of execution')
-    parser.add_argument('--logging-level', metavar='N', type=int, default=30,
-                        help='Logging level. Default value is 30, which is WARNING')
+    parser.add_argument('--logging-level', metavar='N', type=int, default=constants.DEFAULT_LOGGING_LEVEL,
+                        help=f'Logging level. Default value is {constants.DEFAULT_LOGGING_LEVEL}')
 
     utils.set_up_logging(level=args.logging_level)
 

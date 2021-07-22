@@ -11,7 +11,7 @@ DEFAULT_EMBEDDING_DIM = 1024
 def get_embedding(emb, opt=None, noemb="", dim=DEFAULT_EMBEDDING_DIM):
     np_emb = embedding_util.load(emb, strategy=opt, dim=dim)
 
-    logging.debug("embedding 'noemb' shape: {np_emb.shape}")
+    logging.debug("Embedding 'noemb' shape: {np_emb.shape}")
 
     return np_emb
 
@@ -20,7 +20,7 @@ def compare(emb1, opt1, emb2, opt2, dim=DEFAULT_EMBEDDING_DIM):
     np_emb2 = get_embedding(emb2, opt2, noemb="2", dim=dim)
 
     if np_emb1.shape != np_emb2.shape:
-        logging.warning("shapes mismatch")
+        logging.warning("Shapes mismatch")
 
         return False
 
@@ -31,7 +31,7 @@ def identical(emb1, opt1, emb2, opt2, dim=DEFAULT_EMBEDDING_DIM):
     np_emb2 = get_embedding(emb2, opt2, noemb="2", dim=dim)
 
     if np_emb1.shape != np_emb2.shape:
-        logging.warning("shapes mismatch")
+        logging.warning("Shapes mismatch")
 
         return False
 
