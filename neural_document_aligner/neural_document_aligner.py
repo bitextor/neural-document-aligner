@@ -419,9 +419,6 @@ def worker_distance(embedding_src, embedding_trg, return_value):
 def docalign(results, src_docs, trg_docs, src_urls, trg_urls, output_with_urls, only_docalign=False):
     result = {'src': {}, 'trg': {}}
 
-    if (len(results) == 0 or len(results[0]) == 0):
-        return result
-
     if only_docalign:
         result = set()
 
@@ -438,6 +435,9 @@ def docalign(results, src_docs, trg_docs, src_urls, trg_urls, output_with_urls, 
 
             result.add((src_doc, trg_doc))
 
+        return result
+
+    if (len(results) == 0 or len(results[0]) == 0):
         return result
 
     for r in results:
