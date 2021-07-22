@@ -8,8 +8,7 @@ import numpy as np
 
 import compare_embeddings
 import utils
-
-DEFAULT_EMBEDDING_DIM = 1024
+import constants
 
 def main(args):
     dir1 = args.embedding_dir_1
@@ -131,10 +130,10 @@ if __name__ == '__main__':
                         help='Percentage of embeddings to process from directory 1')
     parser.add_argument('--percentage-dir-2', type=float, metavar='F', default=1.0,
                         help='Percentage of embeddings to process from directory 2')
-    parser.add_argument('--dim', type=int, metavar='N', default=DEFAULT_EMBEDDING_DIM,
+    parser.add_argument('--dim', type=int, metavar='N', default=constants.DEFAULT_EMBEDDING_DIM,
                         help='Embedding dimensionality')
-    parser.add_argument('--logging-level', metavar='N', type=int, default=30,
-                        help='Logging level. Default value is 30, which is WARNING')
+    parser.add_argument('--logging-level', metavar='N', type=int, default=constants.DEFAULT_LOGGING_LEVEL,
+                        help=f'Logging level. Default value is {constants.DEFAULT_LOGGING_LEVEL}')
 
     args = parser.parse_args()
 

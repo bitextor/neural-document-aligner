@@ -176,7 +176,7 @@ There are different parameters in order to achieve different behaviours:
     * `--faiss-take-knn N`: number of documents to check the distance from one document of `src-lang` to `trg-lang`.
   * Other (logging):
     * `--logging-level N`: level of logging to show the different lines related to a concrete severity. The more verbose value is a value of 0, but the default value is to only show the necessary information (warning and above).
-    * `--log-file PATH`: log file where all the logging entries will be stored. Even if this option is set, the logging entries will be showed up in the standar error output (if you want to remove those lines, you will need to redirect the standar error output).
+    * `--log-file PATH`: log file where all the logging entries will be stored. Even if this option is set, the logging entries will be showed up in the standar error output (if you want to remove those lines in order to avoid displaying info or warning messages, you can use `--logging-level 40`, which will display only errors, or even a higher value if you do not want any message at all).
 
 ## Example
 

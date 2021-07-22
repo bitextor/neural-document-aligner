@@ -5,17 +5,16 @@ import argparse
 import logging
 
 import utils
+import constants
 
-DEFAULT_EMBEDDING_DIM = 1024
-
-def get_embedding(emb, opt=None, noemb="", dim=DEFAULT_EMBEDDING_DIM):
+def get_embedding(emb, opt=None, noemb="", dim=constants.DEFAULT_EMBEDDING_DIM):
     np_emb = embedding_util.load(emb, strategy=opt, dim=dim)
 
     logging.debug("Embedding 'noemb' shape: {np_emb.shape}")
 
     return np_emb
 
-def compare(emb1, opt1, emb2, opt2, dim=DEFAULT_EMBEDDING_DIM):
+def compare(emb1, opt1, emb2, opt2, dim=constants.DEFAULT_EMBEDDING_DIM):
     np_emb1 = get_embedding(emb1, opt1, noemb="1", dim=dim)
     np_emb2 = get_embedding(emb2, opt2, noemb="2", dim=dim)
 
@@ -26,7 +25,7 @@ def compare(emb1, opt1, emb2, opt2, dim=DEFAULT_EMBEDDING_DIM):
 
     return embedding_util.compare(np_emb1, np_emb2, verbose=verbose)
 
-def identical(emb1, opt1, emb2, opt2, dim=DEFAULT_EMBEDDING_DIM):
+def identical(emb1, opt1, emb2, opt2, dim=constants.DEFAULT_EMBEDDING_DIM):
     np_emb1 = get_embedding(emb1, opt1, noemb="1", dim=dim)
     np_emb2 = get_embedding(emb2, opt2, noemb="2", dim=dim)
 
@@ -57,15 +56,15 @@ if __name__ == '__main__':
     parser.add_argument('embedding_file_2', metavar='embedding-file-2',
                         help='Path to the 2nd embedding')
     parser.add_argument('embedding_opt_1', metavar='embedding-opt-1', default=None,
-                        help='Embedding optimization which we need to apply in order load the 1st embedding (check embedding_util.py)')
+                        help='Embedding optimization which we need to apply in order load the 1st embedding')
     parser.add_argument('embedding_opt_2', metavar='embedding-opt-2', default=None,
-                        help='Embedding optimization which we need to apply in order load the 2nd embedding (check embedding_util.py)')
+                        help='Embedding optimization which we need to apply in order load the 2nd embedding')
 
     # Other
-    parser.add_argument('--dim', type=int, metavar='N', default=DEFAULT_EMBEDDING_DIM,
+    parser.add_argument('--dim', type=int, metavar='N', default=constants.DEFAULT_EMBEDDING_DIM,
                         help='Embedding dimensionality')
-    parser.add_argument('--logging-level', metavar='N', type=int, default=30,
-                        help='Logging level. Default value is 30, which is WARNING')
+    parser.add_argument('--logging-level', metavar='N', type=int, default=constants.DEFAULT_LOGGING_LEVEL,
+                        help=f'Logging level. Default value is {constants.DEFAULT_LOGGING_LEVEL}')
 
     args = parser.parse_args()
 

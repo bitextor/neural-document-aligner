@@ -17,7 +17,7 @@ import constants
 
 DEFAULT_VALUES = {
     "langs_to_process": "-",
-    "max_mbytes_per_batch": 512,
+    "max_mbytes_per_batch": constants.DEFAULT_MAX_MBYTES_PER_BATCH,
     "max_batches_process": np.inf,
     "group": 0,
     "max_groups": 1,
@@ -240,7 +240,7 @@ if __name__ == '__main__':
     parser.add_argument('--max-batches-process', type=int, default=DEFAULT_VALUES['max_batches_process'], metavar='N',
                         help='Max. number of batches to process. You should take into account that even the non-processed batches due to groups configuration will be counted. The default value is no limit')
     parser.add_argument('--max-mbytes-per-batch', type=int, default=DEFAULT_VALUES['max_mbytes_per_batch'], metavar='N',
-                        help='Max. MB which will be processed in a batch. The provided size is not guaranteed, since once it has been detected that the batch contains that size, it will be processed. The default value is 512 (MB)')
+                        help='Max. MB which will be processed in a batch. The provided size is not guaranteed, since once it has been detected that the batch contains that size, it will be processed. The default value is {DEFAULT_VALUES["max_mbytes_per_batch"]} (MB)')
     parser.add_argument('--model', default=DEFAULT_VALUES['model'], metavar='MODEL',
                         help=f'Model to use from \'sentence_transformers\'. The default model is \'{DEFAULT_VALUES["model"]}\'')
 

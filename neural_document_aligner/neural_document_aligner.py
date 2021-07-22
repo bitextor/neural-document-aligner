@@ -22,7 +22,8 @@ import levenshtein
 from exceptions import FileFoundError
 import constants
 
-def generate_embeddings(docs, embedding_files, lang, they_should_exist=True, optimization_strategy=None, model=None):
+def generate_embeddings(docs, embedding_files, lang, they_should_exist=True, optimization_strategy=None, model=None,
+                        max_mbytes_per_batch=constants.DEFAULT_MAX_MBYTES_PER_BATCH):
     for idx, embedding in enumerate(embedding_files):
         # Check if the embeddings either should or not exist
         if os.path.isfile(embedding) != they_should_exist:
@@ -35,7 +36,8 @@ def generate_embeddings(docs, embedding_files, lang, they_should_exist=True, opt
 
     if not they_should_exist:
         # Generate embeddings because they should not exist
-        gen_embeddings.process(docs, [lang] * len(docs), embedding_files, optimization_strategy=optimization_strategy, model=model)
+        gen_embeddings.process(docs, [lang] * len(docs), embedding_files, optimization_strategy=optimization_strategy,
+                               model=model, max_mbytes_per_batch=max_mbytes_per_batch)
 
 def get_embedding_vectors(embedding_file, dim=constants.DEFAULT_EMBEDDING_DIM, optimization_strategy=None):
     embedding = get_embedding.get_embedding(embedding_file, dim=dim, optimization_strategy=optimization_strategy)
@@ -977,6 +979,7 @@ def main(args):
     do_not_merge_on_preprocessing = args.do_not_merge_on_preprocessing
     generate_and_finish = args.generate_and_finish
     model = args.model
+    max_mbytes_per_batch = args.max_mbytes_per_batch
 
     # Configure logging
     utils.set_up_logging(level=args.logging_level, filename=args.log_file)
@@ -998,9 +1001,9 @@ def main(args):
 
     # Generate embeddings (if needed)
     generate_embeddings(src_docs, src_embedding_files, args.src_lang, they_should_exist=not generate_embeddings_arg,
-                        optimization_strategy=gen_emb_optimization_strategy, model=model)
+                        optimization_strategy=gen_emb_optimization_strategy, model=model, max_mbytes_per_batch=max_mbytes_per_batch)
     generate_embeddings(trg_docs, trg_embedding_files, args.trg_lang, they_should_exist=not generate_embeddings_arg,
-                        optimization_strategy=gen_emb_optimization_strategy, model=model)
+                        optimization_strategy=gen_emb_optimization_strategy, model=model, max_mbytes_per_batch=max_mbytes_per_batch)
 
     if generate_and_finish:
         logging.info("The embeddings have been generated and the execution is going to finish")
@@ -1195,6 +1198,8 @@ if __name__ == '__main__':
         help='Dimensionality of the provided embeddings')
     parser.add_argument('--generate-embeddings', action="store_true",
         help='The embeddings provided in the input file will be generated. If the provided path of an embedding exists, it will be overwritten')
+    parser.add_argument('--max-mbytes-per-batch', default=constants.DEFAULT_MAX_MBYTES_PER_BATCH, type=int, metavar='N',
+        help=f'Max. MB which will be used per batch when generating embeddings (the size is not guaranteed). The default value is {constants.DEFAULT_MAX_MBYTES_PER_BATCH}')
     parser.add_argument('--generate-and-finish', action="store_true",
         help='Generate the embeddings and finish the exit')
     parser.add_argument('--random-mask-value', metavar='<v_1>,<v_2>,...,<v_dim>',

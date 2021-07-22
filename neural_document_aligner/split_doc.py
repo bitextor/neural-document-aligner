@@ -10,6 +10,7 @@ from sentence_splitter import SentenceSplitter, SentenceSplitterException
 
 import utils.utils as utils
 from exceptions import FileFoundError
+import constants
 
 def split(doc_path, lang, output=None, text=None):
     if doc_path is not None:
@@ -81,8 +82,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--output', default="-",
                         help='Output file for the results. The default value is \'-\', which means stdout')
-    parser.add_argument('--logging-level', metavar='N', type=int, default=30,
-                        help='Logging level. Default value is 30, which is WARNING')
+    parser.add_argument('--logging-level', metavar='N', type=int, default=constants.DEFAULT_LOGGING_LEVEL,
+                        help=f'Logging level. Default value is {constants.DEFAULT_LOGGING_LEVEL}')
 
     args = parser.parse_args()
 
