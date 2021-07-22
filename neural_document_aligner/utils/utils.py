@@ -49,7 +49,7 @@ def get_nolines(path):
 
     return nolines
 
-def set_up_logging(filename=None, level=logging.INFO, format=constants.DEFAULT_LOGGING_FORMAT):
+def set_up_logging(filename=None, level=logging.INFO, format=constants.DEFAULT_LOGGING_FORMAT, display_when_file=False):
     """It sets up the logging library
     """
     handlers = [
@@ -57,7 +57,12 @@ def set_up_logging(filename=None, level=logging.INFO, format=constants.DEFAULT_L
     ]
 
     if filename is not None:
-        handlers.append(logging.FileHandler(filename))
+        if display_when_file:
+            # Logging messages will be stored and displayed
+            handlers.append(logging.FileHandler(filename))
+        else:
+            # Logging messages will be stored and not displayed
+            handlers[0] = logging.FileHandler(filename)
 
     logging.basicConfig(handlers=handlers, level=level,
                         format=format)

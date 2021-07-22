@@ -50,6 +50,7 @@ usage: neural_document_aligner.py [-h]
                                   [--processes N] [--workers N]
                                   [--model MODEL] [--dim N]
                                   [--generate-embeddings]
+                                  [--max-mbytes-per-batch N]
                                   [--generate-and-finish]
                                   [--random-mask-value <v_1>,<v_2>,...,<v_dim>]
                                   [--check-zeros-mask] [--min-sanity-check N]
@@ -61,7 +62,7 @@ usage: neural_document_aligner.py [-h]
                                   [--faiss-threshold F]
                                   [--faiss-reverse-direction]
                                   [--faiss-take-knn N] [--logging-level N]
-                                  [--log-file PATH]
+                                  [--log-file PATH] [--log-display]
                                   input-file src-lang trg-lang
 ```
 
@@ -166,7 +167,7 @@ There are different parameters in order to achieve different behaviours:
     * `--min-sanity-check N`: number of entries of the `input-file` which will be checked out to be ok.
     * `--input-src-and-trg-splitted`: if you want to provide an `input-file` with the second format instead the default, this option must be set.
     * `--do-not-merge-on-preprocessing`: the merging strategy is applied in a preprocessing step, but some strategies might need to apply the merging strategy by their own (e.g. `lev`). In that case, this option must be set.
-    * `--gold-standard PATH`: if you want to obtain the recall and precision of the resulted matches, you need to provide a gold standar with the format 'src_document_path\ttrg_document_path'.
+    * `--gold-standard PATH`: if you want to obtain the recall and precision of the resulted matches, you need to provide a gold standard with the format 'src_document_path\ttrg_document_path'.
     * `--apply-heuristics`: you can enable heuristics if you set this option. The heuristics are different conditions which makes us to be sure that two documents are not a match even if they have been matched, and with the heuristics that match will be removed.
     * `--output-with-urls`: if you provided URLs in the `input-file` and you want to show them in the results instead of the paths, this option must be set. If this option is set, `--gold-standard PATH` will be expected to contain URLs instead of the paths to the documents.
     * `--process-max-entries N`: max. number of entries to process from the `input-file`.
@@ -176,7 +177,8 @@ There are different parameters in order to achieve different behaviours:
     * `--faiss-take-knn N`: number of documents to check the distance from one document of `src-lang` to `trg-lang`.
   * Other (logging):
     * `--logging-level N`: level of logging to show the different lines related to a concrete severity. The more verbose value is a value of 0, but the default value is to only show the necessary information (warning and above).
-    * `--log-file PATH`: log file where all the logging entries will be stored. Even if this option is set, the logging entries will be showed up in the standar error output (if you want to remove those lines in order to avoid displaying info or warning messages, you can use `--logging-level 40`, which will display only errors, or even a higher value if you do not want any message at all).
+    * `--log-file PATH`: log file where all the logging entries will be stored. When this option is set, the logging entries will not be showed up in the standard error output.
+    * `--log-display`: if you set a file where all the logging messages will be stored using `--log-file`, the logging messages will not be displayed to the output, but to the file instead. If you want that those logging messages are also displayed to the output, this option must be set.
 
 ## Example
 

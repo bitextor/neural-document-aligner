@@ -982,7 +982,7 @@ def main(args):
     max_mbytes_per_batch = args.max_mbytes_per_batch
 
     # Configure logging
-    utils.set_up_logging(level=args.logging_level, filename=args.log_file)
+    utils.set_up_logging(level=args.logging_level, filename=args.log_file, display_when_file=args.log_display)
 
     # Process input file
     src_docs, trg_docs, src_embedding_files, trg_embedding_files, src_urls, trg_urls = \
@@ -1234,6 +1234,8 @@ if __name__ == '__main__':
                         help=f'Logging level. Default value is {constants.DEFAULT_LOGGING_LEVEL}')
     parser.add_argument('--log-file', metavar='PATH', default=None,
                         help='Log file where all the log entries will be stored')
+    parser.add_argument('--log-display', action='store_true',
+                        help='If you set --log-file, logging messages will still be stored but not displayed to standar error output. With this option, the messages will be stored in the log file and also will be displayed')
 
     args = parser.parse_args()
 
