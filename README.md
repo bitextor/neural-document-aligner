@@ -56,10 +56,10 @@ usage: neural_document_aligner.py [-h]
                                   [--check-zeros-mask] [--min-sanity-check N]
                                   [--input-src-and-trg-splitted]
                                   [--do-not-merge-on-preprocessing]
-                                  [--gold-standard PATH] [--apply-heuristics]
-                                  [--output-with-urls]
+                                  [--threshold F] [--gold-standard PATH]
+                                  [--apply-heuristics] [--output-with-urls]
+                                  [--max-loaded-sent-embs-at-once N]
                                   [--process-max-entries N]
-                                  [--faiss-threshold F]
                                   [--faiss-reverse-direction]
                                   [--faiss-take-knn N] [--logging-level N]
                                   [--log-file PATH] [--log-display]
@@ -167,12 +167,13 @@ There are different parameters in order to achieve different behaviours:
     * `--min-sanity-check N`: number of entries of the `input-file` which will be checked out to be ok.
     * `--input-src-and-trg-splitted`: if you want to provide an `input-file` with the second format instead the default, this option must be set.
     * `--do-not-merge-on-preprocessing`: the merging strategy is applied in a preprocessing step, but some strategies might need to apply the merging strategy by their own (e.g. `lev`). In that case, this option must be set.
+    * `--threshold F`: if the score of a match does not reach the provided threshold, it will be discarded.
     * `--gold-standard PATH`: if you want to obtain the recall and precision of the resulted matches, you need to provide a gold standard with the format 'src_document_path\ttrg_document_path'.
     * `--apply-heuristics`: you can enable heuristics if you set this option. The heuristics are different conditions which makes us to be sure that two documents are not a match even if they have been matched, and with the heuristics that match will be removed.
     * `--output-with-urls`: if you provided URLs in the `input-file` and you want to show them in the results instead of the paths, this option must be set. If this option is set, `--gold-standard PATH` will be expected to contain URLs instead of the paths to the documents.
+    * `--max-loaded-sent-embs-at-once N`: the generated embeddings are sentence-level embeddings, and we want document-level embeddings. Since we have to load the sentence-level embeddings in memory, we might run out of memory easily if we have too many documents, documents with too many lines or both. In order to avoid this situation, the number of sentence-level embeddings which we have in memory at once before have document-level embeddings can be configured using this option.
     * `--process-max-entries N`: max. number of entries to process from the `input-file`.
   * Other (`faiss` docalign strategy):
-    * `--faiss-threshold F`: if the score of a match does not reach the provided threshold, it will be discarded.
     * `--faiss-reverse-direction`: instead of going from `src-lang` to `trg-lang` we go from `trg-lang` to `src-lang`.
     * `--faiss-take-knn N`: number of documents to check the distance from one document of `src-lang` to `trg-lang`.
   * Other (logging):

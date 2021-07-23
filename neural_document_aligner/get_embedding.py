@@ -32,7 +32,8 @@ def get_embedding_from_sentence_transformer(list_of_sentences, optimization_stra
 
     return embeddings
 
-def generate_and_store_embeddings(input, outputs, no_sentences, optimization_strategy=None, input_is_list_of_sentences=False, model=constants.DEFAULT_EMBEDDING_DIM):
+def generate_and_store_embeddings(input, outputs, no_sentences, optimization_strategy=None, input_is_list_of_sentences=False,
+                                  model=constants.DEFAULT_EMBEDDING_DIM):
     list_of_sentences = input
 
     if not input_is_list_of_sentences:

@@ -26,7 +26,8 @@ DEFAULT_VALUES = {
     "model": constants.DEFAULT_ST_MODEL,
 }
 
-def generate_embeddings(batch_docs, batch_langs, batch_outputs, langs_to_process, max_size_per_batch, optimization_strategy=None, model=None):
+def generate_embeddings(batch_docs, batch_langs, batch_outputs, langs_to_process, max_size_per_batch, optimization_strategy=None,
+                        model=None):
     if model is None:
         model = DEFAULT_VALUES["model"]
 

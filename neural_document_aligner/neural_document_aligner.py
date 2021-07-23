@@ -664,9 +664,10 @@ def preprocess(src_docs, trg_docs, src_embeddings, trg_embeddings, src_embedding
         remove_idxs = []
         input_src_and_trg_splitted = kwargs["input_src_and_trg_splitted"] if ("input_src_and_trg_splitted" in kwargs) else False
 
-        for idx, (src_embedding, trg_embedding) in enumerate(zip(src_embeddings, trg_embeddings)):
-            if (not input_src_and_trg_splitted and filter(src_embedding, trg_embedding)):
-                remove_idxs.insert(0, idx)
+        if not input_src_and_trg_splitted:
+            for idx, (src_embedding, trg_embedding) in enumerate(zip(src_embeddings, trg_embeddings)):
+                if filter(src_embedding, trg_embedding):
+                    remove_idxs.insert(0, idx)
 
         remove_idxs_str = ' '.join(map(str, remove_idxs))
         logging.debug(f"Elements filtered by heuristics (idxs): {'-' if remove_idxs_str == '' else remove_idxs_str}")
@@ -690,8 +691,8 @@ def preprocess(src_docs, trg_docs, src_embeddings, trg_embeddings, src_embedding
         if len(src_embeddings) + len(trg_embeddings) != len(embeddings):
             raise Exception(f"unexpected length after applying the weights. Expected length: {len(src_embeddings) + len(trg_embeddings)}. Actual length: {len(embeddings)}")
 
-        src_embeddings = embeddings[:len(src_embeddings)]
-        trg_embeddings = embeddings[len(src_embeddings):]
+        src_embeddings[0:] = embeddings[:len(src_embeddings)]
+        trg_embeddings[0:] = embeddings[len(src_embeddings):]
 
     # Merge embeddings
     if "merging_strategy" in kwargs:
@@ -726,7 +727,7 @@ def preprocess(src_docs, trg_docs, src_embeddings, trg_embeddings, src_embedding
 
         # Apply
         for embeddings in (src_embeddings, trg_embeddings):
-            embeddings = apply_mask(embeddings, mask, check_zeros_mask=check_zeros_mask)
+            embeddings[0:] = apply_mask(embeddings, mask, check_zeros_mask=check_zeros_mask)
 
     return src_docs, trg_docs, src_embeddings, trg_embeddings, src_embedding_files, trg_embedding_files, src_urls, trg_urls
 
@@ -822,7 +823,8 @@ def get_faiss(src_docs, trg_docs, src_embeddings, trg_embeddings, take_knn=5, fa
 
     return final_results
 
-def get_lev(src_embeddings, trg_embeddings, src_docs, trg_docs, noprocesses=0, noworkers=10, full=False):
+def get_lev(src_embeddings, trg_embeddings, src_docs, trg_docs, noprocesses=0, noworkers=10, full=False,
+            threshold=None, apply_heuristics=False):
     levenshtein_nfactor = levenshtein_norm_factor(src_embeddings, trg_embeddings)
     results_levenshtein = []
 
@@ -839,9 +841,10 @@ def get_lev(src_embeddings, trg_embeddings, src_docs, trg_docs, noprocesses=0, n
             # Get the args of the workers
             while src_idx < len(src_docs):
                 while (trg_idx < len(trg_docs) and len(processes_args) < noworkers):
-                    processes_args.append((src_embeddings[src_idx], trg_embeddings[trg_idx],
-                                           levenshtein_nfactor, full
-                                           [src_idx, trg_idx, src_idx * len(trg_docs) + trg_idx],))
+                    if (not apply_heuristics or not filter(src_embeddings[src_idx], trg_embeddings[trg_idx])):
+                        processes_args.append((src_embeddings[src_idx], trg_embeddings[trg_idx],
+                                               levenshtein_nfactor, full,
+                                               [src_idx, trg_idx, src_idx * len(trg_docs) + trg_idx],))
                     trg_idx += 1
 
                 if len(processes_args) >= noworkers:
@@ -873,6 +876,9 @@ def get_lev(src_embeddings, trg_embeddings, src_docs, trg_docs, noprocesses=0, n
 
                 result_lev_sim = r[0]["similarity"]
 
+                if (threshold is not None and result_lev_sim < threshold):
+                    continue
+
                 results_levenshtein.append([src_doc, trg_doc, result_lev_sim])
 
             del results
@@ -883,17 +889,24 @@ def get_lev(src_embeddings, trg_embeddings, src_docs, trg_docs, noprocesses=0, n
 
         for embedding_src, src_doc in zip(src_embeddings, src_docs):
             for embedding_trg, trg_doc in zip(trg_embeddings, trg_docs):
+                if (apply_heuristics and filter(embedding_src, embedding_trg)):
+                    continue
+
                 result_lev = lev_function(embedding_src, embedding_trg, nfactor=levenshtein_nfactor,
                                           diff_function_bool=lambda x, y: True,
                                           diff_function_value=lambda x, y: cosine_similarity(x, y))
 
                 result_lev_sim = result_lev["similarity"]
 
+                if (threshold is not None and result_lev_sim < threshold):
+                    continue
+
                 results_levenshtein.append([src_doc, trg_doc, result_lev_sim])
 
     return results_levenshtein
 
-def get_distance(src_embeddings, trg_embeddings, src_docs, trg_docs, noprocesses=0, noworkers=10):
+def get_distance(src_embeddings, trg_embeddings, src_docs, trg_docs, noprocesses=0, noworkers=10, threshold=None,
+                 apply_heuristics=False):
     results_avg = []
 
     # Multiprocessing
@@ -909,8 +922,9 @@ def get_distance(src_embeddings, trg_embeddings, src_docs, trg_docs, noprocesses
             # Get the args of the workers
             while src_idx < len(src_docs):
                 while (trg_idx < len(trg_docs) and len(processes_args) < noworkers):
-                    processes_args.append((src_embeddings[src_idx], trg_embeddings[trg_idx],
-                                           [src_idx, trg_idx, src_idx * len(trg_docs) + trg_idx],))
+                    if (not apply_heuristics or not filter(src_embeddings[src_idx], trg_embeddings[trg_idx])):
+                        processes_args.append((src_embeddings[src_idx], trg_embeddings[trg_idx],
+                                               [src_idx, trg_idx, src_idx * len(trg_docs) + trg_idx],))
                     trg_idx += 1
 
                 if len(processes_args) >= noworkers:
@@ -942,6 +956,9 @@ def get_distance(src_embeddings, trg_embeddings, src_docs, trg_docs, noprocesses
 
                 result_avg = r[0]
 
+                if (threshold is not None and result_avg < threshold):
+                    continue
+
                 results_avg.append([src_doc, trg_doc, result_avg])
 
             del results
@@ -952,8 +969,14 @@ def get_distance(src_embeddings, trg_embeddings, src_docs, trg_docs, noprocesses
 
         for embedding_src, src_doc in zip(src_embeddings, src_docs):
             for embedding_trg, trg_doc in zip(trg_embeddings, trg_docs):
+                if (apply_heuristics and filter(embedding_src, embedding_trg)):
+                    continue
+
 #                result_avg = average_similarity(embedding_src, embedding_trg, storage=storage)
                 cosine = cosine_similarity(embedding_src, embedding_trg)
+
+                if (threshold is not None and 1.0 - cosine < threshold):
+                    continue
 
                 results_avg.append([src_doc, trg_doc, 1.0 - cosine])
 #                results_avg.append([src_doc, trg_doc, result_avg])
@@ -980,6 +1003,9 @@ def main(args):
     generate_and_finish = args.generate_and_finish
     model = args.model
     max_mbytes_per_batch = args.max_mbytes_per_batch
+    max_loaded_sent_embs_at_once = args.max_loaded_sent_embs_at_once
+    apply_heuristics = args.apply_heuristics
+    threshold = args.threshold
 
     # Configure logging
     utils.set_up_logging(level=args.logging_level, filename=args.log_file, display_when_file=args.log_display)
@@ -1001,9 +1027,11 @@ def main(args):
 
     # Generate embeddings (if needed)
     generate_embeddings(src_docs, src_embedding_files, args.src_lang, they_should_exist=not generate_embeddings_arg,
-                        optimization_strategy=gen_emb_optimization_strategy, model=model, max_mbytes_per_batch=max_mbytes_per_batch)
+                        optimization_strategy=gen_emb_optimization_strategy, model=model, max_mbytes_per_batch=max_mbytes_per_batch,
+                        )
     generate_embeddings(trg_docs, trg_embedding_files, args.trg_lang, they_should_exist=not generate_embeddings_arg,
-                        optimization_strategy=gen_emb_optimization_strategy, model=model, max_mbytes_per_batch=max_mbytes_per_batch)
+                        optimization_strategy=gen_emb_optimization_strategy, model=model, max_mbytes_per_batch=max_mbytes_per_batch,
+                        )
 
     if generate_and_finish:
         logging.info("The embeddings have been generated and the execution is going to finish")
@@ -1011,40 +1039,53 @@ def main(args):
 
     src_embeddings = []
     trg_embeddings = []
+    start_idx = 0
+    end_idx = 0
 
-    # Load embeddings
-    for src_embedding in src_embedding_files:
-        src_emb = get_embedding_vectors(src_embedding, dim=dim, optimization_strategy=emb_optimization_strategy)
+    # Get document-level embeddings from sentence-level embeddings (batches)
+    while end_idx < len(src_embedding_files):
+        start_idx = end_idx
+        end_idx = min(start_idx + max_loaded_sent_embs_at_once, len(src_embedding_files))
 
-        src_embeddings.append(src_emb)
-    for trg_embedding in trg_embedding_files:
-        trg_emb = get_embedding_vectors(trg_embedding, dim=dim, optimization_strategy=emb_optimization_strategy)
+        logging.debug(f"Loading embeddings from {start_idx} to {end_idx}")
 
-        trg_embeddings.append(trg_emb)
+        # Load embeddings
+        for src_embedding in src_embedding_files[start_idx:end_idx]:
+            src_emb = get_embedding_vectors(src_embedding, dim=dim, optimization_strategy=emb_optimization_strategy)
 
-    # Sanity check: check if the embeddings have the expected shape
-    for docs, embeddings, label in [(src_docs, src_embeddings, "source"), (trg_docs, trg_embeddings, "target")]:
-        for idx, (doc, embedding) in enumerate(zip(docs[0:min(len(docs), min_sanity_check)],
-                                                   embeddings[0:min(len(embeddings), min_sanity_check)])):
-            nolines = utils.get_nolines(doc)
+            src_embeddings.append(src_emb)
+        for trg_embedding in trg_embedding_files[start_idx:end_idx]:
+            trg_emb = get_embedding_vectors(trg_embedding, dim=dim, optimization_strategy=emb_optimization_strategy)
 
-            if nolines == 0:
-                logging.warning(f"File with 0 lines ({label} - {idx}): '{doc}'")
-            if len(embedding.shape) != 2:
-                raise Exception(f"unexpected shape of embedding ({label} - {idx}). Expected shape is 2: doc with sentences * dim. Actual shape: {len(embedding.shape)}")
-            if embedding.shape[0] == 0:
-                logging.warning(f"Embedding with 0 elements ({label} - {idx})")
-            if nolines != embedding.shape[0]:
-                raise Exception(f"unexpected number of setences ({label} - {idx}). Expected sentences are {nolines}. Actual number of sentences: {embedding.shape[0]}")
-            if embedding.shape[1] != dim:
-                raise Exception(f"unexpected dimension of embedding ({label} - {idx}) according to the provided dim. Expected dim is {dim}. Actual dim: {embedding.shape[1]}")
+            trg_embeddings.append(trg_emb)
 
-    # Preprocess embeddings
-    src_docs, trg_docs, src_embeddings, trg_embeddings, src_embedding_files, trg_embedding_files, src_urls, trg_urls = \
-        preprocess(src_docs, trg_docs, src_embeddings, trg_embeddings, src_embedding_files, trg_embedding_files, src_urls, trg_urls,
-                   weights_strategy=weights_strategy, merging_strategy=merging_strategy, random_mask_value=random_mask_value,
-                   check_zeros_mask=args.check_zeros_mask, do_not_merge_on_preprocessing=do_not_merge_on_preprocessing,
-                   apply_heuristics=args.apply_heuristics, input_src_and_trg_splitted=args.input_src_and_trg_splitted)
+        # Sanity check: check if the embeddings have the expected shape
+        if (start_idx < min_sanity_check):
+            for docs, embeddings, label in [(src_docs, src_embeddings, "source"), (trg_docs, trg_embeddings, "target")]:
+                for idx, (doc, embedding) in enumerate(zip(docs[start_idx:min(len(docs), min_sanity_check, end_idx)],
+                                                           embeddings[start_idx:min(len(embeddings), min_sanity_check, end_idx)])):
+                    nolines = utils.get_nolines(doc)
+
+                    if nolines == 0:
+                        logging.warning(f"File with 0 lines ({label} - {idx}): '{doc}'")
+                    if len(embedding.shape) != 2:
+                        raise Exception(f"unexpected shape of embedding ({label} - {idx}). Expected shape is 2: doc with sentences * dim. Actual shape: {len(embedding.shape)}")
+                    if embedding.shape[0] == 0:
+                        logging.warning(f"Embedding with 0 elements ({label} - {idx})")
+                    # Sentence splitting might do that the length of the embedding is not the expected from the number of lines of the document
+                    #if nolines != embedding.shape[0]:
+                    #    raise Exception(f"unexpected number of setences ({label} - {idx}). Expected sentences are {nolines}. Actual number of sentences: {embedding.shape[0]}")
+                    if embedding.shape[1] != dim:
+                        raise Exception(f"unexpected dimension of embedding ({label} - {idx}) according to the provided dim. Expected dim is {dim}. Actual dim: {embedding.shape[1]}")
+
+        # Preprocess embeddings
+        src_docs[start_idx:end_idx], trg_docs[start_idx:end_idx], src_embeddings[start_idx:end_idx], trg_embeddings[start_idx:end_idx], \
+        src_embedding_files[start_idx:end_idx], trg_embedding_files[start_idx:end_idx], src_urls[start_idx:end_idx], trg_urls[start_idx:end_idx] = \
+            preprocess(src_docs[start_idx:end_idx], trg_docs[start_idx:end_idx], src_embeddings[start_idx:end_idx], trg_embeddings[start_idx:end_idx],
+                       src_embedding_files[start_idx:end_idx], trg_embedding_files[start_idx:end_idx], src_urls[start_idx:end_idx], trg_urls[start_idx:end_idx],
+                       weights_strategy=weights_strategy, merging_strategy=merging_strategy, random_mask_value=random_mask_value,
+                       check_zeros_mask=args.check_zeros_mask, do_not_merge_on_preprocessing=do_not_merge_on_preprocessing,
+                       apply_heuristics=apply_heuristics, input_src_and_trg_splitted=args.input_src_and_trg_splitted)
 
     if (len(src_embeddings) == 0 or len(trg_embeddings) == 0):
         logging.warning("There are not embeddings in both src and trg")
@@ -1064,6 +1105,11 @@ def main(args):
         logging.info(f"Dimension updated from {dim} to {embeddings_dim}")
         dim = embeddings_dim
 
+    if threshold is not None:
+        logging.info(f"Using threshold: {threshold}")
+
+    # TODO show scores (3rd column of output)?
+
     # Docalign, results and, optionally, evaluation
     if docalign_strategy == "faiss":
         faiss_reverse_direction = args.faiss_reverse_direction
@@ -1075,10 +1121,8 @@ def main(args):
             faiss_args.reverse()
 
         results_faiss = get_faiss(*faiss_args, take_knn=int(faiss_take_knn), faiss_reverse_direction=faiss_reverse_direction,
-                                  dim=dim, threshold=args.faiss_threshold)
+                                  dim=dim, threshold=threshold)
         urls_aligned_faiss = docalign(results_faiss, src_docs, trg_docs, src_urls, trg_urls, output_with_urls, only_docalign=True)
-
-        # TODO filter here
 
         if results_strategy == 0:
             logging.info(f"Results: get the best {faiss_take_knn} matches from src to trg docs, sort by score and do not select the either of the two docs again")
@@ -1092,7 +1136,8 @@ def main(args):
 
     elif docalign_strategy in ("lev", "lev-full"):
         results_lev = get_lev(src_embeddings, trg_embeddings, src_docs, trg_docs, noprocesses=noprocesses,
-                              noworkers=noworkers, full=True if docalign_strategy == "lev-full" else False)
+                              noworkers=noworkers, full=True if docalign_strategy == "lev-full" else False,
+                              apply_heuristics=apply_heuristics, threshold=threshold)
 
         urls_aligned_lev = docalign(results_lev, src_docs, trg_docs, src_urls, trg_urls, output_with_urls)
         union_and_int_lev = union_and_intersection(urls_aligned_lev) if urls_aligned_lev else None
@@ -1118,7 +1163,8 @@ def main(args):
                 print(f"recall, precision: {recall}, {precision}")
 
     elif docalign_strategy == "just-merge":
-        results_avg = get_distance(src_embeddings, trg_embeddings, src_docs, trg_docs, noprocesses=noprocesses, noworkers=noworkers)
+        results_avg = get_distance(src_embeddings, trg_embeddings, src_docs, trg_docs, noprocesses=noprocesses, noworkers=noworkers,
+                                   apply_heuristics=apply_heuristics, threshold=threshold)
 
         urls_aligned_avg = docalign(results_avg, src_docs, trg_docs, src_urls, trg_urls, output_with_urls)
         union_and_int_avg = union_and_intersection(urls_aligned_avg) if urls_aligned_avg else None
@@ -1214,17 +1260,19 @@ if __name__ == '__main__':
         help='If set, the expected format of the input file will be different from the initial and src and trg docs will be expected to have a line each instead of being specified in the same line')
     parser.add_argument('--do-not-merge-on-preprocessing', action="store_true",
         help='If set, the embeddings will not be merged on the preprocessing step and will be provided with the original length of the shape. This might be necessary for some docalign strategies which expect to apply some merging strategy instead of get the embeddings merged')
+    parser.add_argument('--threshold', type=float, metavar='F', default=None,
+        help='Matches with score less than the provided threshold will not be added')
     parser.add_argument('--gold-standard', default=None, metavar='PATH',
         help='Path to the gold estandard. The expected format is src_doc_path\\ttrg_doc_path. If you want to use the provided URLs in the input file, use --output-with-urls and the URLs will be used instead of the paths')
     parser.add_argument('--apply-heuristics', action='store_true',
         help='Enable the heuristics to be applied')
     parser.add_argument('--output-with-urls', action="store_true",
         help='Generate the output with src and trg URLs instead of src and trg documents path. URLs have to be provided in the input file')
+    parser.add_argument('--max-loaded-sent-embs-at-once', metavar='N', default=1000, type=int,
+        help='The sentence-level embeddings have to be loaded in memory, but this might be a problem if there is not sufficient memory available. With this option, the quantity of sentence-level embeddings loaded in memory at once can be configured in order to avoid to get run out of memory (once this embeddings have been loaded, they will become into document-level embeddings). The default value is 1000')
     parser.add_argument('--process-max-entries', metavar='N', default=None, type=int,
         help='Process only the first nth entries of the input file. The default value is process all entries')
     ## Faiss
-    parser.add_argument('--faiss-threshold', type=float, metavar='F',
-        help='Entries which have a value less than the threshold will not be added')
     parser.add_argument('--faiss-reverse-direction', action='store_true',
         help='Instead of index source docs and match with target docs, reverse the direction')
     parser.add_argument('--faiss-take-knn', default=5, metavar='N', type=int,
@@ -1241,4 +1289,8 @@ if __name__ == '__main__':
 
     check_args(args)
 
-    main(args)
+    try:
+        main(args)
+    except MemoryError as e:
+        logging.critical("You ran out of memory (--max-loaded-sent-embs-at-once might be a solution)")
+        raise e
