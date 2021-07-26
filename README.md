@@ -51,13 +51,13 @@ usage: neural_document_aligner.py [-h]
                                   [--model MODEL] [--dim N]
                                   [--generate-embeddings]
                                   [--max-mbytes-per-batch N]
+                                  [--embeddings-batch-size N]
                                   [--generate-and-finish]
                                   [--random-mask-value <v_1>,<v_2>,...,<v_dim>]
                                   [--check-zeros-mask] [--min-sanity-check N]
-                                  [--input-src-and-trg-splitted]
-                                  [--do-not-merge-on-preprocessing]
-                                  [--threshold F] [--gold-standard PATH]
-                                  [--apply-heuristics] [--output-with-urls]
+                                  [--do-not-show-scores] [--threshold F]
+                                  [--gold-standard PATH] [--apply-heuristics]
+                                  [--output-with-urls]
                                   [--max-loaded-sent-embs-at-once N]
                                   [--process-max-entries N]
                                   [--faiss-reverse-direction]
@@ -69,15 +69,6 @@ usage: neural_document_aligner.py [-h]
 ### Input format
 
 The input file is expected to be TSV (Tab-Separated Values) file. The columns which we expect are:
-
-1. Path to document in language `src-lang`.
-2. Path to document in language `trg-lang`.
-3. Path to embedding of the document provided in the 1st column.
-4. Path to embedding of the document provided in the 2nd column.
-5. URL related to the document of the 1st column (other information which is related to the document uniquely can also be provided instead of the URL). '-' if you do not want to provide this information.
-6. URL related to the document of the 2nd column (other information which is related to the document uniquely can also be provided instead of the URL). '-' if you do not want to provide this information.
-
-Usually, we have documents with their language code, but we do not have a relation between the documents. In this case, you can use `--input-src-and-trg-splitted` in order to use the following format in the input file:
 
 1. Path to document
 2. Path to embedding of the document provided in the 1st column.
@@ -99,7 +90,7 @@ As a step of the preprocessing, different strategies can be applied to weight th
 
 #### Merge embeddings
 
-As another step of the preprocessing, different strategies can be applied to merge the sentence-level embedding and get a document-level embedding. Sometimes, the document alignment strategy will apply its own merging strategy because needs information which we do not have in the processing step, and in this case, we can use `--do-not-merge-on-preprocessing` (anyway, the merging strategy may reach, optionally, to the document alignment strategy, and different merging strategies may be applied, just after, not at the preprocessing step). The available strategies at the preprocessing step are:
+As another step of the preprocessing, different strategies can be applied to merge the sentence-level embedding and get a document-level embedding. Sometimes, the document alignment strategy will apply its own merging strategy because needs information which we do not have in the processing step but the merging strategy may reach, optionally, to the document alignment strategy, and different merging strategies may be applied, just after, not at the preprocessing step. The available strategies at the preprocessing step are:
 
 1. Do not apply any merging strategy. This strategy can be applied with `--merging-strategy 0`.
 2. Merge embeddings using the average value of the components. This strategy can be applied with `--merging-strategy 1`.
@@ -160,13 +151,14 @@ There are different parameters in order to achieve different behaviours:
     * `--model MODEL`: model which will be used to generate the embeddings using [Sentence Transformers](https://github.com/UKPLab/sentence-transformers) (the model **should** be multilingual). The selected model has to be available in [this list](https://www.sbert.net/docs/pretrained_models.html#sentence-embedding-models). The first time which you select a model, it will be downloaded.
     * `--dim N`: dimensionality of the embeddings. This value might change if you change your embeddings generation source or you apply different processes (e.g. embedding reduction).
     * `--generate-embeddings`: by default, the provided paths to the embeddings in the `input-file` are expected to exist. In the case that you want to generate the embeddings, this option must be set.
+    * `--max-mbytes-per-batch N`: max. MB of content from the documents which will be loaded when generating embeddings.
+    * `--embeddings-batch-size N`: batch size used by [Sentence Transformers](https://github.com/UKPLab/sentence-transformers) when generating embeddings. This will provide control over the usage of the resources (e.g. GPU).
     * `--generate-and-finish`: if you just want to generate the embeddings and do not perform the matching of the documents, this option must be set to finish the execution once the embeddings have been generated.
     * `--random-mask-value <v_1>,<v_2>,...,<v_dim>`: mask to apply to every embedding. If you have a mask which you know that it works better for a specific pair of languagues, you may apply it through this parameter. The expected values are float values.
     * `--check-zeros-mask`: if you want to remove the components of the embeddings which, after applying the mask, the result is 0, this option must be set.
   * Other:
     * `--min-sanity-check N`: number of entries of the `input-file` which will be checked out to be ok.
-    * `--input-src-and-trg-splitted`: if you want to provide an `input-file` with the second format instead the default, this option must be set.
-    * `--do-not-merge-on-preprocessing`: the merging strategy is applied in a preprocessing step, but some strategies might need to apply the merging strategy by their own (e.g. `lev`). In that case, this option must be set.
+    * `--do-not-show-scores`: if you do not want the scores to be shown, this option must be set.
     * `--threshold F`: if the score of a match does not reach the provided threshold, it will be discarded.
     * `--gold-standard PATH`: if you want to obtain the recall and precision of the resulted matches, you need to provide a gold standard with the format 'src_document_path\ttrg_document_path'.
     * `--apply-heuristics`: you can enable heuristics if you set this option. The heuristics are different conditions which makes us to be sure that two documents are not a match even if they have been matched, and with the heuristics that match will be removed.
@@ -194,6 +186,6 @@ python3 neural_document_aligner/neural_document_aligner.py - en fr \
                                                            --docalign-strategy 'faiss' --weights-strategy 0 \
                                                            --merging-strategy 3 --results-strategy 0 \
                                                            --generate-embeddings --gen-emb-optimization-strategy 2 \
-                                                           --emb-optimization-strategy 2 --input-src-and-trg-splitted \
-                                                           --output-with-urls --faiss-threshold 0.7
+                                                           --emb-optimization-strategy 2 --output-with-urls \
+                                                           --threshold 0.7
 ```

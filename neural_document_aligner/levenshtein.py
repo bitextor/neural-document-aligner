@@ -125,7 +125,7 @@ def levenshtein_opt_space_and_band(embedding_src, embedding_trg, nfactor=1, perc
             m[0] = m[1]
 
             if min(row * deletion_cost, min(m[0])) > early_stopping:
-                logging.debug(f"Early stopping: [{m[0][0]} ... {m[0][-1]}] (row: {row})")
+#                logging.debug(f"Early stopping: [{m[0][0]} ... {m[0][-1]}] (row: {row})")
 
                 return {"matrix": m,
                         "value": float(nfactor),

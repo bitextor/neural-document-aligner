@@ -24,10 +24,11 @@ DEFAULT_VALUES = {
     "logging_level": 20,
     "optimization_strategy": None,
     "model": constants.DEFAULT_ST_MODEL,
+    "batch_size": constants.DEFAULT_BATCH_SIZE,
 }
 
 def generate_embeddings(batch_docs, batch_langs, batch_outputs, langs_to_process, max_size_per_batch, optimization_strategy=None,
-                        model=None):
+                        model=None, batch_size=DEFAULT_VALUES["batch_size"]):
     if model is None:
         model = DEFAULT_VALUES["model"]
 
@@ -58,7 +59,7 @@ def generate_embeddings(batch_docs, batch_langs, batch_outputs, langs_to_process
         logging.warning(f"The number of sentences do not match with the expected ({len(content)} vs {total_no_sentences})")
 
     get_embedding.generate_and_store_embeddings(content, batch_outputs, no_sentences, optimization_strategy=optimization_strategy,
-                                                input_is_list_of_sentences=True, model=model)
+                                                input_is_list_of_sentences=True, model=model, batch_size=batch_size)
 
 def buffered_read_from_list(inputs, buffer_size_mb):
     """Read from a list of inputs where each element is expected
@@ -141,6 +142,7 @@ def process(docs, langs, embeddings_output, **kwargs):
     max_groups = kwargs["max_groups"] if "max_groups" in kwargs else DEFAULT_VALUES["max_groups"]
     optimization_strategy = kwargs["optimization_strategy"] if "optimization_strategy" in kwargs else DEFAULT_VALUES["optimization_strategy"]
     model = kwargs["model"] if "model" in kwargs else DEFAULT_VALUES["model"]
+    batch_size = kwargs["batch_size"] if "batch_size" in kwargs else DEFAULT_VALUES["batch_size"]
 
     no_processed_files = 0
     no_processed_batches = 0
@@ -171,7 +173,7 @@ def process(docs, langs, embeddings_output, **kwargs):
 
             # Process the current batch
             generate_embeddings(batch_docs, batch_langs, batch_outputs, langs_to_process, max_size_per_batch,
-                                optimization_strategy=optimization_strategy, model=model)
+                                optimization_strategy=optimization_strategy, model=model, batch_size=batch_size)
 
             size = 0
             noprocessed_batches += 1
@@ -244,6 +246,8 @@ if __name__ == '__main__':
                         help='Max. MB which will be processed in a batch. The provided size is not guaranteed, since once it has been detected that the batch contains that size, it will be processed. The default value is {DEFAULT_VALUES["max_mbytes_per_batch"]} (MB)')
     parser.add_argument('--model', default=DEFAULT_VALUES['model'], metavar='MODEL',
                         help=f'Model to use from \'sentence_transformers\'. The default model is \'{DEFAULT_VALUES["model"]}\'')
+    parser.add_argument('--batch-size', default=DEFAULT_VALUES['batch_size'], metavar='N',
+                        help=f'Batch size for the embeddings generation. The default value is \'{DEFAULT_VALUES["batch_size"]}\'')
 
     # Lang
     parser.add_argument('--langs-to-process', default=DEFAULT_VALUES['langs_to_process'],

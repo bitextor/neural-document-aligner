@@ -18,13 +18,14 @@ def get_embedding(embedding_file, dim=constants.DEFAULT_EMBEDDING_DIM, optimizat
 
     return embedding
 
-def get_embedding_from_sentence_transformer(list_of_sentences, optimization_strategy=None, model=constants.DEFAULT_EMBEDDING_DIM):
+def get_embedding_from_sentence_transformer(list_of_sentences, optimization_strategy=None, model=constants.DEFAULT_EMBEDDING_DIM,
+                                            batch_size=constants.DEFAULT_BATCH_SIZE):
     try:
         model = SentenceTransformer(model)
     except Exception as e:
         raise Exception(f"could not load the model '{model}' (maybe is not in the list of available models of 'sentence_transformers')") from e
 
-    embeddings = model.encode(list_of_sentences)
+    embeddings = model.encode(list_of_sentences, batch_size=batch_size, show_progress_bar=constants.ST_SHOW_PROGRESS)
 
     # Embedding optimization
     if optimization_strategy is not None:
@@ -33,7 +34,7 @@ def get_embedding_from_sentence_transformer(list_of_sentences, optimization_stra
     return embeddings
 
 def generate_and_store_embeddings(input, outputs, no_sentences, optimization_strategy=None, input_is_list_of_sentences=False,
-                                  model=constants.DEFAULT_EMBEDDING_DIM):
+                                  model=constants.DEFAULT_EMBEDDING_DIM, batch_size=constants.DEFAULT_BATCH_SIZE):
     list_of_sentences = input
 
     if not input_is_list_of_sentences:
@@ -43,7 +44,8 @@ def generate_and_store_embeddings(input, outputs, no_sentences, optimization_str
             for line in f:
                 list_of_sentences.append(line.strip())
 
-    embeddings = get_embedding_from_sentence_transformer(list_of_sentences, optimization_strategy=optimization_strategy, model=model)
+    embeddings = get_embedding_from_sentence_transformer(list_of_sentences, optimization_strategy=optimization_strategy, model=model,
+                                                         batch_size=batch_size)
 
     previous = 0
 
