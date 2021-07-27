@@ -497,42 +497,6 @@ def union_and_intersection(aligned_urls):
 
     return {'union': union, 'intersection': intersection}
 
-def get_docs(path, max_nodocs=None, iso88591=False):
-    docs = []
-    urls = []
-    idx = 0
-
-    if iso88591:
-        f = open(path, "r", encoding="ISO-8859-1")
-    else:
-        f = open(path, "r")
-
-    try:
-        for line in f:
-            if (max_nodocs and idx >= max_nodocs):
-                break
-
-            line = line.strip().split("\t")
-
-            docs.append(line[0][:-7])
-            urls.append(line[1])
-
-            idx += 1
-    except Exception as e:
-        logging.error(str(e))
-
-        if not iso88591:
-            del docs
-            del urls
-
-            logging.warning(f"Trying with ISO-8859-1 encoding")
-
-            return get_docs(path, max_nodocs, True)
-
-    f.close()
-
-    return docs, urls
-
 def process_input_file(args, max_noentries=None):
     input_file = args.input_file
     generate_embeddings_arg = args.generate_embeddings
@@ -541,6 +505,7 @@ def process_input_file(args, max_noentries=None):
     src_embedding_files, trg_embedding_files = [], []
     src_urls, trg_urls = [], []
     get_urls = True
+    get_docs = True
     file_open = False
 
     if input_file == "-":
@@ -577,14 +542,32 @@ def process_input_file(args, max_noentries=None):
             embedding_files_vector = trg_embedding_files
             urls_vector = trg_urls
 
-        docs_vector.append(utils.expand_and_real_path_and_exists(line[0], raise_exception=True))
+        # Optional documents
+        if (get_docs and line[0] == "-"):
+            get_docs = False
+        if get_docs:
+            docs_vector.append(utils.expand_and_real_path_and_exists(line[0], raise_exception=True))
+
+        # Embedding path
         embedding_files_vector.append(utils.expand_and_real_path_and_exists(line[1], raise_exception=False if generate_embeddings_arg else True))
 
+        # Optional URLs
         if (get_urls and line[2] == "-"):
             get_urls = False
-
         if get_urls:
             urls_vector.append(line[2])
+
+    if (not get_docs and not get_urls):
+        raise Exception("it is necessary to provide either documents paths or URLs paths (or both), but neither were provided")
+
+    if not get_docs:
+        if len(src_docs) != 0:
+            logging.warning(f"docs were added to src docs but are going to be ignored since not all of them were provided")
+        if len(trg_docs) != 0:
+            logging.warning(f"docs were added to trg docs but are going to be ignored since not all of them were provided")
+
+        src_docs = [None] * len(src_urls)
+        trg_docs = [None] * len(trg_urls)
 
     if not get_urls:
         if len(src_urls) != 0:
@@ -594,6 +577,11 @@ def process_input_file(args, max_noentries=None):
 
         src_urls = [None] * len(src_docs)
         trg_urls = [None] * len(trg_docs)
+
+    if (len(src_docs) != len(src_embedding_files) or len(src_docs) != len(src_urls)):
+        raise Exception("unexpected size of the src data")
+    if (len(trg_docs) != len(trg_embedding_files) or len(trg_docs) != len(trg_urls)):
+        raise Exception("unexpected size of the trg data")
 
     if file_open:
         data_src.close()
@@ -971,6 +959,7 @@ def main(args):
     do_not_show_scores = args.do_not_show_scores
     # Not args
     do_not_merge_on_preprocessing = docalign_strategy_applies_own_embedding_merging(docalign_strategy)
+    docs_were_not_provided = False
 
     # Configure logging
     utils.set_up_logging(level=args.logging_level, filename=args.log_file, display_when_file=args.log_display)
@@ -978,6 +967,18 @@ def main(args):
     # Process input file
     src_docs, trg_docs, src_embedding_files, trg_embedding_files, src_urls, trg_urls = \
         process_input_file(args, max_noentries)
+
+    # Check if the documents' path were provided
+    if ((len(src_docs) != 0 and src_docs[0] is None) or
+        (len(trg_docs) != 0 and trg_docs[0] is None)):
+        if (generate_embeddings_arg or not output_with_urls or (weights_strategy is not None and weights_strategy != 0)):
+            raise Exception("when you do not provide documents' paths you cannot: set '--generate-embeddings', do not set '--output-with-urls' or set '--weights-strategy' with a value different of 0")
+
+        docs_were_not_provided = True
+        output_with_urls = False # We force the user to set this flag to let him know about the behaviour, but we disable it internally
+
+    if docs_were_not_provided:
+        logging.info("Since documents' paths were not provided, URLs will be used instead as if they were the documents' paths")
 
     if weights_strategy != 0:
         logging.info(f"Weights strategy: {weights_strategy}")
@@ -1029,7 +1030,10 @@ def main(args):
             for docs, embeddings, label in [(src_docs, src_embeddings, "source"), (trg_docs, trg_embeddings, "target")]:
                 for idx, (doc, embedding) in enumerate(zip(docs[start_idx:min(len(docs), min_sanity_check, end_idx)],
                                                            embeddings[start_idx:min(len(embeddings), min_sanity_check, end_idx)])):
-                    nolines = utils.get_nolines(doc)
+                    if doc is None:
+                        nolines = embedding.shape[0] if embedding.shape[0] != 0 else 1
+                    else:
+                        nolines = utils.get_nolines(doc)
 
                     if nolines == 0:
                         logging.warning(f"File with 0 lines ({label} - {idx}): '{doc}'")
@@ -1047,8 +1051,7 @@ def main(args):
         src_docs[start_idx:end_idx], trg_docs[start_idx:end_idx], src_embeddings[start_idx:end_idx], trg_embeddings[start_idx:end_idx] = \
             preprocess(src_docs[start_idx:end_idx], trg_docs[start_idx:end_idx], src_embeddings[start_idx:end_idx], trg_embeddings[start_idx:end_idx],
                        weights_strategy=weights_strategy, merging_strategy=merging_strategy, random_mask_value=random_mask_value,
-                       check_zeros_mask=args.check_zeros_mask, do_not_merge_on_preprocessing=do_not_merge_on_preprocessing,
-                       apply_heuristics=apply_heuristics)
+                       check_zeros_mask=args.check_zeros_mask, do_not_merge_on_preprocessing=do_not_merge_on_preprocessing)
 
     if (len(src_embeddings) == 0 or len(trg_embeddings) == 0):
         logging.warning("There are not embeddings in both src and trg")
@@ -1079,6 +1082,9 @@ def main(args):
         faiss_take_knn = args.faiss_take_knn
 
         faiss_args = [src_docs, trg_docs, src_embeddings, trg_embeddings]
+
+        if docs_were_not_provided:
+            faiss_args = [src_urls, trg_urls, src_embeddings, trg_embeddings]
 
         if faiss_reverse_direction:
             faiss_args.reverse()
@@ -1164,7 +1170,7 @@ if __name__ == '__main__':
 
     # Embedding
     parser.add_argument('input_file', metavar='input-file',
-        help='TSV file with doc_path\\temb_path\\turl_or_dash\\t<src|trg> entries and without header. The embeddings will be assumed to exists if --generate-embeddings is not set')
+        help='TSV file with doc_path_or_dash\\temb_path\\turl_or_dash\\t<src|trg> entries and without header. The embeddings will be assumed to exists if --generate-embeddings is not set. Either documents or URLs have to be provided (or both); if documents\' paths are not provided, you will not be able to: generate embeddings, get the output with the documents\' paths or apply a weight strategy')
     parser.add_argument('src_lang', metavar='src-lang',
         help='Source documents language')
     parser.add_argument('trg_lang', metavar='trg-lang',

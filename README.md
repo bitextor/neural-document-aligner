@@ -70,16 +70,32 @@ usage: neural_document_aligner.py [-h]
 
 The input file is expected to be TSV (Tab-Separated Values) file. The columns which we expect are:
 
-1. Path to document
+1. Path to document. '-' if you do not want to provide this information.
 2. Path to embedding of the document provided in the 1st column.
 3. URL related to the document of the 1st column (other information which is related to the document uniquely can also be provided instead of the URL). '-' if you do not want to provide this information.
 4. 'src' if the language of the document provided in the 1st column is `src-lang`. 'trg' if the language of the document provided in the 1st column is `trg-lang`.
+
+The 1st and 3rd columns are optional, but either of them will be necessary to be provided. In the case of do not provide the paths to documents, there will be more limitations:
+
+* You will not be able to generate embeddings, so the provided embeddings will have to exist.
+* The output of the matches will be with the URLs (i.e. 3rd column). This is optional when you provide paths to the documents and URLs.
+* You will not be able to apply any [weight strategy](#weight-embeddings).
+
+### Output format
+
+The output format is in TSV format, and each row is a match of a pair of documents:
+
+1. Path to `src-lang` document.
+2. Path to `trg-lang` document.
+3. Score of the matching, which will be different deppending on the selected [strategies](#strategies). This column is optional and can be disabled using `--do-now-show-scores`.
+
+If instead of the path to the documents you want the URLs, you can use `--output-with-urls`.
 
 ### Strategies
 
 Different strategies have been implemented for different actions.
 
-#### Weigh embeddings
+#### Weight embeddings
 
 As a step of the preprocessing, different strategies can be applied to weight the embeddings. The available strategies are:
 

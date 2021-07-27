@@ -100,14 +100,16 @@ def process_gold_standard(gs, result, filter=None, docs_urls=None, soft_recall=F
             elif soft_recall:
                 # Soft recall
                 if (len(sr_res) == 1 and docs_urls is not None):
+                    sr_res_value = sr_res.pop()
+
                     # (url1, url2) E gs
                     # sr_res[0] E results
-                    if (sr_res[0][0] == url1 or sr_res[0][1] == url1):
+                    if (sr_res_value[0] == url1 or sr_res_value[1] == url1):
                         # Check distance edition between url2 and 0 or 1
-                        sr_res_compare = sr_res[0][0]
+                        sr_res_compare = sr_res_value[0]
 
-                        if sr_res[0][0] == url1:
-                            sr_res_compare = sr_res[0][1]
+                        if sr_res_value[0] == url1:
+                            sr_res_compare = sr_res_value[1]
 
                         # Check distance edition between url2 and sr_res_compare
                         if near_duplicates(url2, sr_res_compare, docs_urls):
@@ -117,10 +119,10 @@ def process_gold_standard(gs, result, filter=None, docs_urls=None, soft_recall=F
                             precision += 1
                     else:
                         # Check distance edition between url1 and 0 or 1
-                        sr_res_compare = sr_res[0][0]
+                        sr_res_compare = sr_res_value[0]
 
-                        if sr_res[0][0] == url2:
-                            sr_res_compare = sr_res[0][1]
+                        if sr_res_value[0] == url2:
+                            sr_res_compare = sr_res_value[1]
 
                         # Check distance edition between url1 and sr_res_compare
                         if near_duplicates(url2, sr_res_compare, docs_urls):
