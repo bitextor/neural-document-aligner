@@ -84,7 +84,7 @@ def load(file, dim=DEFAULT_EMBEDDING_DIM, strategy=None):
     x = None
 
     if strategy is not None:
-        x = get_original_embedding_from_optimized(file=file, strategy=strategy)
+        x = get_original_embedding_from_optimized(file=file, strategy=strategy, dim=dim)
     else:
         if file == '-':
             x = sys.stdin.buffer.read()

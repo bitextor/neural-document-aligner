@@ -53,11 +53,12 @@ usage: neural_document_aligner.py [-h]
                                   [--max-mbytes-per-batch N]
                                   [--embeddings-batch-size N]
                                   [--generate-and-finish]
-                                  [--random-mask-value <v_1>,<v_2>,...,<v_dim>]
+                                  [--mask-value <v_1>,<v_2>,...,<v_dim>]
                                   [--check-zeros-mask] [--min-sanity-check N]
+                                  [--sentence-splitting]
                                   [--do-not-show-scores] [--threshold F]
                                   [--gold-standard PATH] [--apply-heuristics]
-                                  [--output-with-urls]
+                                  [--output-with-urls] [--output-with-idxs]
                                   [--max-loaded-sent-embs-at-once N]
                                   [--process-max-entries N]
                                   [--faiss-reverse-direction]
@@ -70,8 +71,8 @@ usage: neural_document_aligner.py [-h]
 
 The input file is expected to be TSV (Tab-Separated Values) file. The columns which we expect are:
 
-1. Path to document. '-' if you do not want to provide this information.
-2. Path to embedding of the document provided in the 1st column.
+1. Path to document. '-' if you do not want to provide this information. The documents are expected to be provided in clear text.
+2. Path to embedding of the document provided in the 1st column. The embeddings are expected to exist, but if you want to generate them, the provided path will be where the embeddings will be stored (check `--generate-embeddings`).
 3. URL related to the document of the 1st column (other information which is related to the document uniquely can also be provided instead of the URL). '-' if you do not want to provide this information.
 4. 'src' if the language of the document provided in the 1st column is `src-lang`. 'trg' if the language of the document provided in the 1st column is `trg-lang`.
 
@@ -174,11 +175,13 @@ There are different parameters in order to achieve different behaviours:
     * `--check-zeros-mask`: if you want to remove the components of the embeddings which, after applying the mask, the result is 0, this option must be set.
   * Other:
     * `--min-sanity-check N`: number of entries of the `input-file` which will be checked out to be ok.
+    * `--sentence-splitting`: apply sentence splitting to the documents before generating the embeddings.
     * `--do-not-show-scores`: if you do not want the scores to be shown, this option must be set.
     * `--threshold F`: if the score of a match does not reach the provided threshold, it will be discarded.
     * `--gold-standard PATH`: if you want to obtain the recall and precision of the resulted matches, you need to provide a gold standard with the format 'src_document_path\ttrg_document_path'.
     * `--apply-heuristics`: you can enable heuristics if you set this option. The heuristics are different conditions which makes us to be sure that two documents are not a match even if they have been matched, and with the heuristics that match will be removed.
     * `--output-with-urls`: if you provided URLs in the `input-file` and you want to show them in the results instead of the paths, this option must be set. If this option is set, `--gold-standard PATH` will be expected to contain URLs instead of the paths to the documents.
+    * `--output-with-idxs`: if you set this option, the output will be provided using the index of the documents, starting in 0 for both `src-lang` and `trg-lang` documents. Besides, if `--output-with-urls` is set, indexes will be used (both options are not incompatible, since `--output-with-urls` might also be necessary to set if, for instance, you want to apply the evaluation with `--gold-standard`).
     * `--max-loaded-sent-embs-at-once N`: the generated embeddings are sentence-level embeddings, and we want document-level embeddings. Since we have to load the sentence-level embeddings in memory, we might run out of memory easily if we have too many documents, documents with too many lines or both. In order to avoid this situation, the number of sentence-level embeddings which we have in memory at once before have document-level embeddings can be configured using this option.
     * `--process-max-entries N`: max. number of entries to process from the `input-file`.
   * Other (`faiss` docalign strategy):

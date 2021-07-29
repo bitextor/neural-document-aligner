@@ -25,10 +25,11 @@ DEFAULT_VALUES = {
     "optimization_strategy": None,
     "model": constants.DEFAULT_ST_MODEL,
     "batch_size": constants.DEFAULT_BATCH_SIZE,
+    "sentence_splitting": constants.DEFAULT_SENTENCE_SPLITTING,
 }
 
 def generate_embeddings(batch_docs, batch_langs, batch_outputs, langs_to_process, max_size_per_batch, optimization_strategy=None,
-                        model=None, batch_size=DEFAULT_VALUES["batch_size"]):
+                        model=None, batch_size=DEFAULT_VALUES["batch_size"], sentence_splitting=DEFAULT_VALUES["sentence_splitting"]):
     if model is None:
         model = DEFAULT_VALUES["model"]
 
@@ -45,11 +46,17 @@ def generate_embeddings(batch_docs, batch_langs, batch_outputs, langs_to_process
 
         embedding_output = batch_outputs[idx]
         document_content = doc_content
-        split_status, document_content_splitted = split_doc.split(None, current_lang, output=None, text=document_content)
-        document_content_splitted = document_content_splitted.strip().split("\n")
 
-        if split_status != 0:
-            logging.warning(f"Splitting status is not 0: {split_status}")
+        if sentence_splitting:
+            split_status, document_content_splitted = split_doc.split(None, current_lang, output=None, text=document_content)
+#            document_content_splitted = document_content_splitted.strip().split("\n")
+
+            if split_status != 0:
+                logging.warning(f"Splitting status is not 0: {split_status}")
+        else:
+            document_content_splitted = document_content
+
+        document_content_splitted = document_content_splitted.strip().split("\n")
 
         content.extend(document_content_splitted)
         no_sentences.append(len(document_content_splitted))
@@ -135,14 +142,15 @@ def process_input_file(args, max_noentries=None):
     return docs, langs, embeddings_output
 
 def process(docs, langs, embeddings_output, **kwargs):
-    langs_to_process = kwargs["langs_to_process"] if "langs_to_process" in kwargs else DEFAULT_VALUES["langs_to_process"]
     max_size_per_batch = kwargs["max_mbytes_per_batch"] if "max_mbytes_per_batch" in kwargs else DEFAULT_VALUES["max_mbytes_per_batch"]
     max_batches_process = kwargs["max_batches_process"] if "max_batches_process" in kwargs else DEFAULT_VALUES["max_batches_process"]
     group = kwargs["group"] if "group" in kwargs else DEFAULT_VALUES["group"]
     max_groups = kwargs["max_groups"] if "max_groups" in kwargs else DEFAULT_VALUES["max_groups"]
+    langs_to_process = kwargs["langs_to_process"] if "langs_to_process" in kwargs else DEFAULT_VALUES["langs_to_process"]
     optimization_strategy = kwargs["optimization_strategy"] if "optimization_strategy" in kwargs else DEFAULT_VALUES["optimization_strategy"]
     model = kwargs["model"] if "model" in kwargs else DEFAULT_VALUES["model"]
     batch_size = kwargs["batch_size"] if "batch_size" in kwargs else DEFAULT_VALUES["batch_size"]
+    sentence_splitting = kwargs["sentence_splitting"] if "sentence_splitting" in kwargs else DEFAULT_VALUES["sentence_splitting"]
 
     no_processed_files = 0
     no_processed_batches = 0
@@ -192,20 +200,21 @@ def process(docs, langs, embeddings_output, **kwargs):
     logging.info(f"Number of processed files: {noprocessed_files} of {noprocessed_files + no_processed_files}")
 
 def main(args):
-    input_file = args.input_file
+    max_size_per_batch = args.max_mbytes_per_batch
     max_batches_process = args.max_batches_process
     group = args.group
     max_groups = args.max_groups
     langs_to_process = args.langs_to_process.split(",")
-    max_size_per_batch = args.max_mbytes_per_batch
     optimization_strategy = args.optimization_strategy
     model = args.model
+    batch_size = args.batch_size
+    sentence_splitting = args.sentence_splitting
 
     docs, langs, embeddings_output = process_input_file(args)
 
     process(docs, langs, embeddings_output, langs_to_process=langs_to_process, max_mbytes_per_batch=max_size_per_batch,
-            max_batches_process=max_batches_process, group=group, max_group=max_group,
-            optimization_strategy=optimization_strategy, model=model)
+            max_batches_process=max_batches_process, group=group, max_group=max_group, batch_size=batch_size,
+            optimization_strategy=optimization_strategy, model=model, sentence_splitting=sentence_splitting)
 
 def check_args(args):
     assert args.max_groups > 0, "The max. number of groups must be greater than 0"
@@ -260,6 +269,9 @@ if __name__ == '__main__':
                         help='Skip embeddings whose output already exist')
     parser.add_argument('--optimization-strategy', default=DEFAULT_VALUES['optimization_strategy'], type=int,
                         help='Store the embeddings using an optimization strategy. Default value is do not apply any optimization')
+    parser.add_argument('--sentence-splitting', action='store_true',
+                        help='Apply sentence splitting to the documents')
+    # Logging
     parser.add_argument('--logging-level', metavar='N', type=int, default=DEFAULT_VALUES['logging_level'],
                         help=f'Logging level. Default value is {DEFAULT_VALUES["logging_level"]}')
 

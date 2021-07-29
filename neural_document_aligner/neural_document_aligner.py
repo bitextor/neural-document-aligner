@@ -24,7 +24,7 @@ import constants
 
 def generate_embeddings(docs, embedding_files, lang, they_should_exist=True, optimization_strategy=None, model=None,
                         max_mbytes_per_batch=constants.DEFAULT_MAX_MBYTES_PER_BATCH,
-                        embeddings_batch_size=constants.DEFAULT_BATCH_SIZE):
+                        embeddings_batch_size=constants.DEFAULT_BATCH_SIZE, sentence_splitting=constants.DEFAULT_SENTENCE_SPLITTING):
     for idx, embedding in enumerate(embedding_files):
         # Check if the embeddings either should or not exist
         if os.path.isfile(embedding) != they_should_exist:
@@ -39,8 +39,12 @@ def generate_embeddings(docs, embedding_files, lang, they_should_exist=True, opt
         # Generate embeddings because they should not exist
         logging.info(f"Generating embeddings (batch size: {embeddings_batch_size})")
 
+        if sentence_splitting:
+            logging.info(f"Sentence splitting will be applied")
+
         gen_embeddings.process(docs, [lang] * len(docs), embedding_files, optimization_strategy=optimization_strategy,
-                               model=model, max_mbytes_per_batch=max_mbytes_per_batch, batch_size=embeddings_batch_size)
+                               model=model, max_mbytes_per_batch=max_mbytes_per_batch, batch_size=embeddings_batch_size,
+                               sentence_splitting=sentence_splitting)
 
 def get_embedding_vectors(embedding_file, dim=constants.DEFAULT_EMBEDDING_DIM, optimization_strategy=None):
     embedding = get_embedding.get_embedding(embedding_file, dim=dim, optimization_strategy=optimization_strategy)
@@ -652,10 +656,10 @@ def preprocess(src_docs, trg_docs, src_embeddings, trg_embeddings, **kwargs):
                     embeddings[idx] = merge_embedding(embedding, merging_strategy=merging_strategy, dim=dim)
 
     # Apply random mask to embeddings
-    if ("random_mask_value" in kwargs and kwargs["random_mask_value"]):
+    if ("mask_value" in kwargs and kwargs["mask_value"]):
         logging.info(f"Using provided random mask")
 
-        mask = kwargs["random_mask_value"].split(',')
+        mask = kwargs["mask_value"].split(',')
         mask = np.float32(list(map(lambda x: np.float32(x), mask)))
         check_zeros_mask = False if "check_zeros_mask" not in kwargs else kwargs["check_zeros_mask"]
 
@@ -946,7 +950,7 @@ def main(args):
     emb_optimization_strategy = None if args.emb_optimization_strategy == 0 else args.emb_optimization_strategy
     max_noentries = args.process_max_entries
     min_sanity_check = args.min_sanity_check if args.min_sanity_check >= 0 else 0
-    random_mask_value = args.random_mask_value
+    mask_value = args.mask_value
     docalign_strategy = args.docalign_strategy
     results_strategy = args.results_strategy
     generate_and_finish = args.generate_and_finish
@@ -957,6 +961,8 @@ def main(args):
     threshold = args.threshold
     embeddings_batch_size = args.embeddings_batch_size
     do_not_show_scores = args.do_not_show_scores
+    output_with_idxs = args.output_with_idxs
+    sentence_splitting = args.sentence_splitting
     # Not args
     do_not_merge_on_preprocessing = docalign_strategy_applies_own_embedding_merging(docalign_strategy)
     docs_were_not_provided = False
@@ -994,10 +1000,10 @@ def main(args):
     # Generate embeddings (if needed)
     generate_embeddings(src_docs, src_embedding_files, args.src_lang, they_should_exist=not generate_embeddings_arg,
                         optimization_strategy=gen_emb_optimization_strategy, model=model, max_mbytes_per_batch=max_mbytes_per_batch,
-                        embeddings_batch_size=embeddings_batch_size)
+                        embeddings_batch_size=embeddings_batch_size, sentence_splitting=sentence_splitting)
     generate_embeddings(trg_docs, trg_embedding_files, args.trg_lang, they_should_exist=not generate_embeddings_arg,
                         optimization_strategy=gen_emb_optimization_strategy, model=model, max_mbytes_per_batch=max_mbytes_per_batch,
-                        embeddings_batch_size=embeddings_batch_size)
+                        embeddings_batch_size=embeddings_batch_size, sentence_splitting=sentence_splitting)
 
     if generate_and_finish:
         logging.info("The embeddings have been generated and the execution is going to finish")
@@ -1050,7 +1056,7 @@ def main(args):
         # Preprocess embeddings
         src_docs[start_idx:end_idx], trg_docs[start_idx:end_idx], src_embeddings[start_idx:end_idx], trg_embeddings[start_idx:end_idx] = \
             preprocess(src_docs[start_idx:end_idx], trg_docs[start_idx:end_idx], src_embeddings[start_idx:end_idx], trg_embeddings[start_idx:end_idx],
-                       weights_strategy=weights_strategy, merging_strategy=merging_strategy, random_mask_value=random_mask_value,
+                       weights_strategy=weights_strategy, merging_strategy=merging_strategy, mask_value=mask_value,
                        check_zeros_mask=args.check_zeros_mask, do_not_merge_on_preprocessing=do_not_merge_on_preprocessing)
 
     if (len(src_embeddings) == 0 or len(trg_embeddings) == 0):
@@ -1141,16 +1147,29 @@ def main(args):
 
     # Print results
     for r in results_variable:
+        src_result = r[0]
+        trg_result = r[1]
         score = "unknown"
         hash_score = hash(r[0]) + hash(r[1])
 
         if hash_score in scores.keys():
             score = scores[hash_score]
 
+        # Use indexes?
+        if output_with_idxs:
+            if (docs_were_not_provided or output_with_urls):
+                # The results contain URLs
+                src_result = src_urls.index(src_result)
+                trg_result = trg_urls.index(trg_result)
+            else:
+                # The results contain documents paths
+                src_result = src_docs.index(src_result)
+                trg_result = trg_docs.index(trg_result)
+
         if do_not_show_scores:
-            print(f"{r[0]}\t{r[1]}")
+            print(f"{src_result}\t{trg_result}")
         else:
-            print(f"{r[0]}\t{r[1]}\t{score}")
+            print(f"{src_result}\t{trg_result}\t{score}")
 
     # Evaluation
     if gold_standard:
@@ -1214,14 +1233,16 @@ if __name__ == '__main__':
         help=f'Batch size for the embeddings generation. The default value is {constants.DEFAULT_BATCH_SIZE}')
     parser.add_argument('--generate-and-finish', action="store_true",
         help='Generate the embeddings and finish the exit')
-    parser.add_argument('--random-mask-value', metavar='<v_1>,<v_2>,...,<v_dim>',
-        help='Random mask value. The expected format is: <value_1>,<value_2>,...,<value_n> (n=embeddings dim)')
+    parser.add_argument('--mask-value', metavar='<v_1>,<v_2>,...,<v_dim>',
+        help='Mask value which will be applied to every embedding. The expected format is: <value_1>,<value_2>,...,<value_n> (n=embeddings dim)')
     parser.add_argument('--check-zeros-mask', action="store_true",
         help='If --random-mask-value is provided beside this option, if any value of the mask is zero, the dimensionality will be reduced in that components')
 
     # Other
     parser.add_argument('--min-sanity-check', default=5, type=int, metavar='N',
         help='Min. quantity of documents to sanity check. Default is 5')
+    parser.add_argument('--sentence-splitting', action="store_true",
+        help='Apply sentence splitting to the documents before generating the embeddings')
     parser.add_argument('--do-not-show-scores', action="store_true",
         help='If set, the scores of the matches will not be shown')
     parser.add_argument('--threshold', type=float, metavar='F', default=None,
@@ -1232,6 +1253,8 @@ if __name__ == '__main__':
         help='Enable the heuristics to be applied')
     parser.add_argument('--output-with-urls', action="store_true",
         help='Generate the output with src and trg URLs instead of src and trg documents path. URLs have to be provided in the input file')
+    parser.add_argument('--output-with-idxs', action="store_true",
+        help='Generate the output with src and trg indexes instead of src and trg documents path')
     parser.add_argument('--max-loaded-sent-embs-at-once', metavar='N', default=1000, type=int,
         help='The sentence-level embeddings have to be loaded in memory, but this might be a problem if there is not sufficient memory available. With this option, the quantity of sentence-level embeddings loaded in memory at once can be configured in order to avoid to get run out of memory (once this embeddings have been loaded, they will become into document-level embeddings). The default value is 1000')
     parser.add_argument('--process-max-entries', metavar='N', default=None, type=int,
