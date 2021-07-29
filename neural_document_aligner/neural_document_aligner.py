@@ -15,7 +15,7 @@ from multiprocessing import Process, Pool
 import faiss
 
 import utils.utils as utils
-import get_embedding
+import utils.embedding_util as embedding_util
 import generate_embeddings as gen_embeddings
 import evaluate
 import levenshtein
@@ -47,7 +47,7 @@ def generate_embeddings(docs, embedding_files, lang, they_should_exist=True, opt
                                sentence_splitting=sentence_splitting)
 
 def get_embedding_vectors(embedding_file, dim=constants.DEFAULT_EMBEDDING_DIM, optimization_strategy=None):
-    embedding = get_embedding.get_embedding(embedding_file, dim=dim, optimization_strategy=optimization_strategy)
+    embedding = embedding_util.load(embedding_file, dim=dim, strategy=optimization_strategy)
 
     return embedding
 

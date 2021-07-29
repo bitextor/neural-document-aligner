@@ -7,9 +7,10 @@ import argparse
 import tempfile
 
 import numpy as np
+from sentence_transformers import SentenceTransformer, util
 
+import utils.embedding_util as embedding_util
 import split_doc
-import get_embedding
 import utils.utils as utils
 from exceptions import FileFoundError
 import utils.utils as utils
@@ -27,6 +28,46 @@ DEFAULT_VALUES = {
     "batch_size": constants.DEFAULT_BATCH_SIZE,
     "sentence_splitting": constants.DEFAULT_SENTENCE_SPLITTING,
 }
+
+def get_embedding_from_sentence_transformer(list_of_sentences, optimization_strategy=None, model=constants.DEFAULT_EMBEDDING_DIM,
+                                            batch_size=constants.DEFAULT_BATCH_SIZE):
+    try:
+        model = SentenceTransformer(model)
+    except Exception as e:
+        raise Exception(f"could not load the model '{model}' (maybe is not in the list of available models of 'sentence_transformers')") from e
+
+    embeddings = model.encode(list_of_sentences, batch_size=batch_size, show_progress_bar=constants.ST_SHOW_PROGRESS)
+
+    # Embedding optimization
+    if optimization_strategy is not None:
+        embeddings = embedding_util.get_optimized_embedding(embeddings, strategy=optimization_strategy)
+
+    return embeddings
+
+def generate_and_store_embeddings(input, outputs, no_sentences, optimization_strategy=None, input_is_list_of_sentences=False,
+                                  model=constants.DEFAULT_EMBEDDING_DIM, batch_size=constants.DEFAULT_BATCH_SIZE):
+    list_of_sentences = input
+
+    if not input_is_list_of_sentences:
+        list_of_sentences = []
+
+        with open(input, "r") as f:
+            for line in f:
+                list_of_sentences.append(line.strip())
+
+    embeddings = get_embedding_from_sentence_transformer(list_of_sentences, optimization_strategy=optimization_strategy, model=model,
+                                                         batch_size=batch_size)
+
+    previous = 0
+
+    for no_sent, output in zip(no_sentences, outputs):
+        emb = embeddings[previous:previous + no_sent]
+        previous += no_sent
+
+        emb.tofile(output)
+
+    if embeddings.shape[0] != previous:
+        logging.warning("Once the embedding has been stored, the length seems to mismatch")
 
 def generate_embeddings(batch_docs, batch_langs, batch_outputs, langs_to_process, max_size_per_batch, optimization_strategy=None,
                         model=None, batch_size=DEFAULT_VALUES["batch_size"], sentence_splitting=DEFAULT_VALUES["sentence_splitting"]):
@@ -65,8 +106,8 @@ def generate_embeddings(batch_docs, batch_langs, batch_outputs, langs_to_process
     if len(content) != total_no_sentences:
         logging.warning(f"The number of sentences do not match with the expected ({len(content)} vs {total_no_sentences})")
 
-    get_embedding.generate_and_store_embeddings(content, batch_outputs, no_sentences, optimization_strategy=optimization_strategy,
-                                                input_is_list_of_sentences=True, model=model, batch_size=batch_size)
+    generate_and_store_embeddings(content, batch_outputs, no_sentences, optimization_strategy=optimization_strategy,
+                                  input_is_list_of_sentences=True, model=model, batch_size=batch_size)
 
 def buffered_read_from_list(inputs, buffer_size_mb):
     """Read from a list of inputs where each element is expected
