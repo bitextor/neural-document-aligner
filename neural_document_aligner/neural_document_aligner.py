@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 import os
 import sys
@@ -15,39 +15,37 @@ from multiprocessing import Process, Pool
 import faiss
 
 import utils.utils as utils
-import utils.embedding_util as embedding_util
+import utils.embedding_utils as embedding_utils
 import generate_embeddings as gen_embeddings
 import evaluate
 import levenshtein
 from exceptions import FileFoundError
 import constants
 
-def generate_embeddings(docs, embedding_files, lang, they_should_exist=True, optimization_strategy=None, model=None,
+def generate_embeddings(docs, embedding_file, lang, generate=False, optimization_strategy=None, model=None,
                         max_mbytes_per_batch=constants.DEFAULT_MAX_MBYTES_PER_BATCH,
                         embeddings_batch_size=constants.DEFAULT_BATCH_SIZE, sentence_splitting=constants.DEFAULT_SENTENCE_SPLITTING):
-    for idx, embedding in enumerate(embedding_files):
-        # Check if the embeddings either should or not exist
-        if os.path.isfile(embedding) != they_should_exist:
-            if they_should_exist:
-                logging.error(f"Embedding #{idx} should exist but it does not")
-                raise FileNotFoundError(embedding)
-            else:
-                logging.error(f"Embedding #{idx} should not exist but it does")
-                raise FileFoundError(embedding)
+    if not os.path.isfile(embedding_file) != generate:
+        if generate:
+            logging.error(f"Embedding #{idx} should not exist but it does")
+            raise FileFoundError(embedding)
+        else:
+            logging.error(f"Embedding #{idx} should exist but it does not")
+            raise FileNotFoundError(embedding)
 
-    if not they_should_exist:
+    if generate:
         # Generate embeddings because they should not exist
         logging.info(f"Generating embeddings (batch size: {embeddings_batch_size})")
 
         if sentence_splitting:
             logging.info(f"Sentence splitting will be applied")
 
-        gen_embeddings.process(docs, [lang] * len(docs), embedding_files, optimization_strategy=optimization_strategy,
+        gen_embeddings.process(docs, [lang] * len(docs), embedding_file, optimization_strategy=optimization_strategy,
                                model=model, max_mbytes_per_batch=max_mbytes_per_batch, batch_size=embeddings_batch_size,
                                sentence_splitting=sentence_splitting)
 
 def get_embedding_vectors(embedding_file, dim=constants.DEFAULT_EMBEDDING_DIM, optimization_strategy=None):
-    embedding = embedding_util.load(embedding_file, dim=dim, strategy=optimization_strategy)
+    embedding = embedding_utils.load(embedding_file, dim=dim, strategy=optimization_strategy, file_is_fd=True)
 
     return embedding
 
@@ -503,10 +501,8 @@ def union_and_intersection(aligned_urls):
 
 def process_input_file(args, max_noentries=None):
     input_file = args.input_file
-    generate_embeddings_arg = args.generate_embeddings
 
     src_docs, trg_docs = [], []
-    src_embedding_files, trg_embedding_files = [], []
     src_urls, trg_urls = [], []
     get_urls = True
     get_docs = True
@@ -525,25 +521,23 @@ def process_input_file(args, max_noentries=None):
 
         line = line.strip().split("\t")
 
-        # Expected format: doc\tembedding_file\turl_or_dash\t<src|trg>
+        # Expected format: doc<tab>url_or_dash<tab><src|trg>
 
-        if len(line) != 4:
+        if len(line) != 3:
             logging.warning(f"Unexpected format in line #{idx + 1} (it will be skipped)")
             continue
 
-        src_or_trg = line[3].lower()
+        src_or_trg = line[2].lower()
 
         if src_or_trg not in ("src", "trg"):
             logging.warning(f"Unexpected format in line #{idx + 1} (it will be skipped)")
             continue
 
         docs_vector = src_docs
-        embedding_files_vector = src_embedding_files
         urls_vector = src_urls
 
         if src_or_trg == "trg":
             docs_vector = trg_docs
-            embedding_files_vector = trg_embedding_files
             urls_vector = trg_urls
 
         # Optional documents
@@ -552,14 +546,11 @@ def process_input_file(args, max_noentries=None):
         if get_docs:
             docs_vector.append(utils.expand_and_real_path_and_exists(line[0], raise_exception=True))
 
-        # Embedding path
-        embedding_files_vector.append(utils.expand_and_real_path_and_exists(line[1], raise_exception=False if generate_embeddings_arg else True))
-
         # Optional URLs
-        if (get_urls and line[2] == "-"):
+        if (get_urls and line[1] == "-"):
             get_urls = False
         if get_urls:
-            urls_vector.append(line[2])
+            urls_vector.append(line[1])
 
     if (not get_docs and not get_urls):
         raise Exception("it is necessary to provide either documents paths or URLs paths (or both), but neither were provided")
@@ -582,15 +573,15 @@ def process_input_file(args, max_noentries=None):
         src_urls = [None] * len(src_docs)
         trg_urls = [None] * len(trg_docs)
 
-    if (len(src_docs) != len(src_embedding_files) or len(src_docs) != len(src_urls)):
+    if (len(src_docs) != len(src_urls)):
         raise Exception("unexpected size of the src data")
-    if (len(trg_docs) != len(trg_embedding_files) or len(trg_docs) != len(trg_urls)):
+    if (len(trg_docs) != len(trg_urls)):
         raise Exception("unexpected size of the trg data")
 
     if file_open:
         data_src.close()
 
-    return src_docs, trg_docs, src_embedding_files, trg_embedding_files, src_urls, trg_urls
+    return src_docs, trg_docs, src_urls, trg_urls
 
 def filter(src_embedding, trg_embedding, src_nolines=None, trg_nolines=None, percentage=0.3):
     if (src_nolines is not None and trg_nolines is not None):
@@ -938,13 +929,16 @@ def docalign_strategy_applies_own_embedding_merging(docalign_strategy):
 
 def main(args):
     # Args
+    src_embeddings_path = utils.expand_and_real_path_and_exists(args.src_embeddings_path)
+    trg_embeddings_path = utils.expand_and_real_path_and_exists(args.trg_embeddings_path)
+    src_lang = args.src_lang
+    trg_lang = args.trg_lang
     dim = args.dim
     gold_standard = args.gold_standard
     noprocesses = args.processes
     noworkers = args.workers
     weights_strategy = args.weights_strategy
     merging_strategy = args.merging_strategy
-    generate_embeddings_arg = args.generate_embeddings
     output_with_urls = args.output_with_urls
     gen_emb_optimization_strategy = None if args.gen_emb_optimization_strategy == 0 else args.gen_emb_optimization_strategy
     emb_optimization_strategy = None if args.emb_optimization_strategy == 0 else args.emb_optimization_strategy
@@ -966,19 +960,23 @@ def main(args):
     # Not args
     do_not_merge_on_preprocessing = docalign_strategy_applies_own_embedding_merging(docalign_strategy)
     docs_were_not_provided = False
+    src_embeddings_path_exist = os.path.isfile(src_embeddings_path)
+    trg_embeddings_path_exist = os.path.isfile(trg_embeddings_path)
+
+    if (gen_emb_optimization_strategy != emb_optimization_strategy and (not src_embeddings_path_exist or not trg_embeddings_path_exist)):
+        raise Exception("embeddings are going to be generated with an optimization strategy different from the one with they will be loaded (check --gen-emb-optimization-strategy and --emb-optimization-strategy)")
 
     # Configure logging
     utils.set_up_logging(level=args.logging_level, filename=args.log_file, display_when_file=args.log_display)
 
     # Process input file
-    src_docs, trg_docs, src_embedding_files, trg_embedding_files, src_urls, trg_urls = \
-        process_input_file(args, max_noentries)
+    src_docs, trg_docs, src_urls, trg_urls = process_input_file(args, max_noentries)
 
     # Check if the documents' path were provided
     if ((len(src_docs) != 0 and src_docs[0] is None) or
         (len(trg_docs) != 0 and trg_docs[0] is None)):
-        if (generate_embeddings_arg or not output_with_urls or (weights_strategy is not None and weights_strategy != 0)):
-            raise Exception("when you do not provide documents' paths you cannot: set '--generate-embeddings', do not set '--output-with-urls' or set '--weights-strategy' with a value different of 0")
+        if (not src_embeddings_path_exist or not trg_embeddings_path_exist or (not output_with_urls and not output_with_idxs) or (weights_strategy is not None and weights_strategy != 0)):
+            raise Exception("when you do not provide documents' paths you cannot: provide 'src-embeddings-path' which does not exist, provide 'trg-embeddings-path' which does not exist, do not set '--output-with-urls' or '--output-with-idxs', or set '--weights-strategy' with a value different of 0")
 
         docs_were_not_provided = True
         output_with_urls = False # We force the user to set this flag to let him know about the behaviour, but we disable it internally
@@ -997,37 +995,50 @@ def main(args):
     if not gold_standard:
         gold_standard = None
 
+    # Check if the lang is necessary
+    if (sentence_splitting and not src_embeddings_path_exist and src_lang is None):
+        raise Exception("if you want to sentence-splitting before the generation of the src embeddings, you need to provide the src lang")
+    if (sentence_splitting and not trg_embeddings_path_exist and trg_lang is None):
+        raise Exception("if you want to sentence-splitting before the generation of the trg embeddings, you need to provide the trg lang")
+
     # Generate embeddings (if needed)
-    generate_embeddings(src_docs, src_embedding_files, args.src_lang, they_should_exist=not generate_embeddings_arg,
+    generate_embeddings(src_docs, src_embeddings_path, src_lang, generate=not src_embeddings_path_exist,
                         optimization_strategy=gen_emb_optimization_strategy, model=model, max_mbytes_per_batch=max_mbytes_per_batch,
                         embeddings_batch_size=embeddings_batch_size, sentence_splitting=sentence_splitting)
-    generate_embeddings(trg_docs, trg_embedding_files, args.trg_lang, they_should_exist=not generate_embeddings_arg,
+    generate_embeddings(trg_docs, trg_embeddings_path, trg_lang, generate=not trg_embeddings_path_exist,
                         optimization_strategy=gen_emb_optimization_strategy, model=model, max_mbytes_per_batch=max_mbytes_per_batch,
                         embeddings_batch_size=embeddings_batch_size, sentence_splitting=sentence_splitting)
 
     if generate_and_finish:
-        logging.info("The embeddings have been generated and the execution is going to finish")
+        if (src_embeddings_path_exist and trg_embeddings_path_exist):
+            logging.warning("The embeddings have not been generated, since the provided files already exist, but the execution is going to finish because --generate-and-finish have been set")
+        else:
+            logging.info("The embeddings have been generated and the execution is going to finish")
+
         return
 
     src_embeddings = []
     trg_embeddings = []
     start_idx = 0
     end_idx = 0
+    max_length_docs = max(len(src_docs), len(trg_docs))
+    src_embeddings_fd = open(src_embeddings_path, "rb")
+    trg_embeddings_fd = open(trg_embeddings_path, "rb")
 
     # Get document-level embeddings from sentence-level embeddings (batches)
-    while end_idx < len(src_embedding_files):
+    while end_idx < max_length_docs:
         start_idx = end_idx
-        end_idx = min(start_idx + max_loaded_sent_embs_at_once, len(src_embedding_files))
+        end_idx = min(start_idx + max_loaded_sent_embs_at_once, max_length_docs)
 
         logging.debug(f"Loading embeddings from {start_idx} to {end_idx}")
 
         # Load embeddings
-        for src_embedding in src_embedding_files[start_idx:end_idx]:
-            src_emb = get_embedding_vectors(src_embedding, dim=dim, optimization_strategy=emb_optimization_strategy)
+        for _ in range(start_idx, min(end_idx, len(src_docs))): # src embeddings
+            src_emb = get_embedding_vectors(src_embeddings_fd, dim=dim, optimization_strategy=emb_optimization_strategy)
 
             src_embeddings.append(src_emb)
-        for trg_embedding in trg_embedding_files[start_idx:end_idx]:
-            trg_emb = get_embedding_vectors(trg_embedding, dim=dim, optimization_strategy=emb_optimization_strategy)
+        for _ in range(start_idx, min(end_idx, len(trg_docs))): # trg embeddings
+            trg_emb = get_embedding_vectors(trg_embeddings_fd, dim=dim, optimization_strategy=emb_optimization_strategy)
 
             trg_embeddings.append(trg_emb)
 
@@ -1059,9 +1070,15 @@ def main(args):
                        weights_strategy=weights_strategy, merging_strategy=merging_strategy, mask_value=mask_value,
                        check_zeros_mask=args.check_zeros_mask, do_not_merge_on_preprocessing=do_not_merge_on_preprocessing)
 
+    src_embeddings_fd.close()
+    trg_embeddings_fd.close()
+
     if (len(src_embeddings) == 0 or len(trg_embeddings) == 0):
         logging.warning("There are not embeddings in both src and trg")
         return
+
+    logging.debug("Loaded src embeddings: {len(src_embeddings)}")
+    logging.debug("Loaded trg embeddings: {len(trg_embeddings)}")
 
     # Fix dim if necessary
     embeddings_dim = len(src_embeddings[0]) if len(src_embeddings) > 0 else None
@@ -1071,7 +1088,7 @@ def main(args):
         embeddings_dim = len(src_embeddings[0][0]) if (len(src_embeddings) > 0 and len(src_embeddings[0]) > 0) else None
         embeddings_dim = len(trg_embeddings[0][0]) if (len(trg_embeddings) > 0 and len(trg_embeddings[0]) > 0 and embeddings_dim is None) else embeddings_dim
 
-    if (embeddings_dim is None and not generate_embeddings_arg):
+    if (embeddings_dim is None and src_embeddings_path_exist and trg_embeddings_path_exist):
         logging.warning(f"Could not infer the dimension of the embeddings")
     elif (embeddings_dim != dim and embeddings_dim is not None):
         logging.info(f"Dimension updated from {dim} to {embeddings_dim}")
@@ -1177,10 +1194,6 @@ def main(args):
         print(f"recall, precision: {recall}, {precision}")
 
 def check_args(args):
-    if (args.generate_embeddings and args.gen_emb_optimization_strategy != args.emb_optimization_strategy):
-        raise Exception("embeddings are going to be generated with an optimization strategy different from the one with they will be loaded (check --gen-emb-optimization-strategy and --emb-optimization-strategy)")
-    if (args.generate_and_finish and not args.generate_embeddings):
-        raise Exception("you cannot generate embeddings and finish the execution if you have not provided the flag in order to generate the embeddings")
     if (not docalign_strategy_applies_own_embedding_merging(args.docalign_strategy) and args.merging_strategy == 0):
         raise Exception(f"docalign strategy '{args.docalign_strategy}' needs a merging strategy different of 0")
 
@@ -1189,11 +1202,11 @@ if __name__ == '__main__':
 
     # Embedding
     parser.add_argument('input_file', metavar='input-file',
-        help='TSV file with doc_path_or_dash\\temb_path\\turl_or_dash\\t<src|trg> entries and without header. The embeddings will be assumed to exists if --generate-embeddings is not set. Either documents or URLs have to be provided (or both); if documents\' paths are not provided, you will not be able to: generate embeddings, get the output with the documents\' paths or apply a weight strategy')
-    parser.add_argument('src_lang', metavar='src-lang',
-        help='Source documents language')
-    parser.add_argument('trg_lang', metavar='trg-lang',
-        help='Target documents language')
+        help='TSV file with doc_path_or_dash<tab>url_or_dash<tab><src|trg> entries and without header. Either documents or URLs have to be provided (or both); if documents\' paths are not provided, you will not be able to: generate embeddings, get the output with the documents\' paths or apply a weight strategy')
+    parser.add_argument('src_embeddings_path', metavar='src-embeddings-path',
+        help='Path to the file which contains the src embeddings. If the file does not exist, the embeddings will be generated')
+    parser.add_argument('trg_embeddings_path', metavar='trg-embeddings-path',
+        help='Path to the file which contains the trg embeddings. If the file does not exist, the embeddings will be generated')
 
     # Strategies
     parser.add_argument('--docalign-strategy', default='faiss',
@@ -1224,9 +1237,11 @@ if __name__ == '__main__':
     parser.add_argument('--model', metavar='MODEL', default=None,
         help=f'Model to use from \'sentence_transformers\'. The default model is \'{constants.DEFAULT_ST_MODEL}\'')
     parser.add_argument('--dim', default=constants.DEFAULT_EMBEDDING_DIM, type=int, metavar='N',
-        help='Dimensionality of the provided embeddings')
-    parser.add_argument('--generate-embeddings', action="store_true",
-        help='The embeddings provided in the input file will be generated. If the provided path of an embedding exists, it will be overwritten')
+        help=f'Dimensionality of the provided embeddings. The default value is {constants.DEFAULT_EMBEDDING_DIM}')
+    parser.add_argument('--src-lang', default=None,
+        help='Source documents language')
+    parser.add_argument('--trg-lang', default=None,
+        help='Target documents language')
     parser.add_argument('--max-mbytes-per-batch', default=constants.DEFAULT_MAX_MBYTES_PER_BATCH, type=int, metavar='N',
         help=f'Max. MB which will be used per batch when generating embeddings (the size is not guaranteed). The default value is {constants.DEFAULT_MAX_MBYTES_PER_BATCH}')
     parser.add_argument('--embeddings-batch-size', default=constants.DEFAULT_BATCH_SIZE, type=int, metavar='N',
@@ -1242,13 +1257,13 @@ if __name__ == '__main__':
     parser.add_argument('--min-sanity-check', default=5, type=int, metavar='N',
         help='Min. quantity of documents to sanity check. Default is 5')
     parser.add_argument('--sentence-splitting', action="store_true",
-        help='Apply sentence splitting to the documents before generating the embeddings')
+        help='Apply sentence splitting to the documents before generating the embeddings. You will need to provide the langs of the documents in order to apply the sentence splitter')
     parser.add_argument('--do-not-show-scores', action="store_true",
         help='If set, the scores of the matches will not be shown')
     parser.add_argument('--threshold', type=float, metavar='F', default=None,
         help='Matches with score less than the provided threshold will not be added')
     parser.add_argument('--gold-standard', default=None, metavar='PATH',
-        help='Path to the gold estandard. The expected format is src_doc_path\\ttrg_doc_path. If you want to use the provided URLs in the input file, use --output-with-urls and the URLs will be used instead of the paths')
+        help='Path to the gold estandard. The expected format is src_doc_path<tab>trg_doc_path. If you want to use the provided URLs in the input file, use --output-with-urls and the URLs will be used instead of the paths')
     parser.add_argument('--apply-heuristics', action='store_true',
         help='Enable the heuristics to be applied')
     parser.add_argument('--output-with-urls', action="store_true",

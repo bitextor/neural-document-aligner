@@ -4,6 +4,8 @@ import sys
 import logging
 import datetime
 
+import numpy as np
+
 import constants
 
 def expand_and_real_path_and_exists(path, rtn_path_if_doesnt_exist=False, func_check_exists=os.path.isfile,
@@ -49,7 +51,7 @@ def get_nolines(path):
 
     return nolines
 
-def set_up_logging(filename=None, level=logging.INFO, format=constants.DEFAULT_LOGGING_FORMAT, display_when_file=False):
+def set_up_logging(filename=None, level=constants.DEFAULT_LOGGING_LEVEL, format=constants.DEFAULT_LOGGING_FORMAT, display_when_file=False):
     """It sets up the logging library
     """
     handlers = [
