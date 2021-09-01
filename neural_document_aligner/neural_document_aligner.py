@@ -735,12 +735,9 @@ def get_faiss(src_docs, trg_docs, src_embeddings, trg_embeddings, take_knn=5, fa
                 logging.warning(f"Skipping this result: {str(e)}")
                 continue
 
-            result_faiss = D[idx][idx2]
+            result_faiss = D[idx][idx2] # Cosine similarity: [-1, 1]
 
-            if result_faiss >= 1.0 + sys.float_info.epsilon:
-                logging.warning(f"Faiss normalization not working well ({result_faiss})?")
-
-            result_faiss = min(result_faiss, 1.0)
+            result_faiss = max(min(result_faiss, 1.0), 0.0) # Clipping
 
             results.append([i[idx2], idx, result_faiss])
 
@@ -754,7 +751,7 @@ def get_faiss(src_docs, trg_docs, src_embeddings, trg_embeddings, take_knn=5, fa
         if (r[1] in already_trg or r[0] in already_src):
             continue
 
-        score = r[2]
+        score = r[2] # Cosine similarity: [-1, 1]
 
         if (threshold is not None and score < threshold):
             continue
@@ -925,9 +922,9 @@ def get_distance(src_embeddings, trg_embeddings, src_docs, trg_docs, noprocesses
     return results_distance
 
 def docalign_strategy_applies_own_embedding_merging(docalign_strategy):
-    if args.docalign_strategy in ("faiss", "just-merge"):
+    if docalign_strategy in ("faiss", "just-merge"):
         return False
-    elif args.docalign_strategy in ("lev", "lev-full"):
+    elif docalign_strategy in ("lev", "lev-full"):
         return True
 
     raise Exception(f"unknown docalign strategy: '{docalign_strategy}'")
@@ -1055,14 +1052,17 @@ def main(args):
         logging.debug(f"Loading embeddings from {start_idx} to {end_idx}")
 
         # Load embeddings
-        for _ in range(start_idx, min(end_idx, len(src_docs))): # src embeddings
-            src_emb = get_embedding_vectors(src_embeddings_fd, dim=dim, optimization_strategy=emb_optimization_strategy)
+        try:
+            for _ in range(start_idx, min(end_idx, len(src_docs))): # src embeddings
+                src_emb = get_embedding_vectors(src_embeddings_fd, dim=dim, optimization_strategy=emb_optimization_strategy)
 
-            src_embeddings.append(src_emb)
-        for _ in range(start_idx, min(end_idx, len(trg_docs))): # trg embeddings
-            trg_emb = get_embedding_vectors(trg_embeddings_fd, dim=dim, optimization_strategy=emb_optimization_strategy)
+                src_embeddings.append(src_emb)
+            for _ in range(start_idx, min(end_idx, len(trg_docs))): # trg embeddings
+                trg_emb = get_embedding_vectors(trg_embeddings_fd, dim=dim, optimization_strategy=emb_optimization_strategy)
 
-            trg_embeddings.append(trg_emb)
+                trg_embeddings.append(trg_emb)
+        except ValueError as e:
+            raise Exception("could not load the embeddings (correct number of embeddings to load from file?)") from e
 
         # Sanity check: check if the embeddings have the expected shape
         if (start_idx < min_sanity_check):
@@ -1102,8 +1102,8 @@ def main(args):
         logging.warning("There are not embeddings in both src and trg")
         return
 
-    logging.debug("Loaded src embeddings: {len(src_embeddings)}")
-    logging.debug("Loaded trg embeddings: {len(trg_embeddings)}")
+    logging.debug(f"Loaded src embeddings: {len(src_embeddings)}")
+    logging.debug(f"Loaded trg embeddings: {len(trg_embeddings)}")
 
     # Fix dim if necessary
     embeddings_dim = len(src_embeddings[0]) if len(src_embeddings) > 0 else None
@@ -1222,8 +1222,8 @@ def check_args(args):
     if (not docalign_strategy_applies_own_embedding_merging(args.docalign_strategy) and args.merging_strategy == 0):
         raise Exception(f"docalign strategy '{args.docalign_strategy}' needs a merging strategy different of 0")
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Neural document aligner')
+def parse_args():
+    parser = argparse.ArgumentParser(description='Neural Document Aligner')
 
     # Embedding
     parser.add_argument('input_file', metavar='input-file',
@@ -1316,10 +1316,17 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    return args
+
+def main_wrapper():
+    args = parse_args()
+
     check_args(args)
 
     try:
         main(args)
     except MemoryError as e:
-        logging.critical("You ran out of memory (--max-loaded-sent-embs-at-once might be a solution)")
-        raise e
+        raise Exception("you ran out of memory (--max-loaded-sent-embs-at-once might be a solution)") from e
+
+if __name__ == '__main__':
+    main_wrapper()
