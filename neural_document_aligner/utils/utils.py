@@ -68,3 +68,15 @@ def set_up_logging(filename=None, level=constants.DEFAULT_LOGGING_LEVEL, format=
 
     logging.basicConfig(handlers=handlers, level=level,
                         format=format)
+
+class custom_context_manager_without_behaviour:
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        return True
+

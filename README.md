@@ -61,6 +61,7 @@ usage: neural_document_aligner.py [-h]
                                   [--output-with-urls] [--output-with-idxs]
                                   [--max-loaded-sent-embs-at-once N]
                                   [--process-max-entries N]
+                                  [--paths-to-docs-are-base64-values]
                                   [--faiss-reverse-direction]
                                   [--faiss-take-knn N] [--logging-level N]
                                   [--log-file PATH] [--log-display]
@@ -72,7 +73,7 @@ usage: neural_document_aligner.py [-h]
 
 The input file is expected to be TSV (Tab-Separated Values) file. The columns which we expect are:
 
-1. Path to document. '-' if you do not want to provide this information. The documents are expected to be provided in clear text.
+1. Path to document. '-' if you do not want to provide this information. The documents are expected to be provided in clear text. If instead of providing paths to the documents you prefer to provide Base64 values of the documents, check out `--paths-to-docs-are-base64-values`.
 2. URL related to the document of the 1st column (other information which is related to the document uniquely can also be provided instead of the URL). '-' if you do not want to provide this information.
 3. 'src' if the documents provided in the 1st column are related to the source embeddings file. 'trg' if the documents provided in the 1st column are related to the target embeddings file.
 
@@ -187,6 +188,7 @@ There are different parameters in order to achieve different behaviours:
     * `--output-with-idxs`: if you set this option, the output will be provided using the index of the documents, starting in 0 for both source and target documents. Besides, if `--output-with-urls` is set, indexes will be used (both options are not incompatible, since `--output-with-urls` might also be necessary to set if, for instance, you want to apply the evaluation with `--gold-standard`).
     * `--max-loaded-sent-embs-at-once N`: the generated embeddings are sentence-level embeddings, and we want document-level embeddings. Since we have to load the sentence-level embeddings in memory, we might run out of memory easily if we have too many documents, documents with too many lines or both. In order to avoid this situation, the number of sentence-level embeddings which we have in memory at once before have document-level embeddings can be configured using this option.
     * `--process-max-entries N`: max. number of entries to process from the `input-file`.
+    * `--paths-to-docs-are-base64-values`: if this option is set, the first column of the input file will be expected to contain the base64 value of the docs instead of the paths.
   * Other (`faiss` docalign strategy):
     * `--faiss-reverse-direction`: instead of going from source to target, we go from target to source.
     * `--faiss-take-knn N`: number of target documents to check the distance from one source document.
@@ -195,19 +197,33 @@ There are different parameters in order to achieve different behaviours:
     * `--log-file PATH`: log file where all the logging entries will be stored. When this option is set, the logging entries will not be showed up in the standard error output.
     * `--log-display`: if you set a file where all the logging messages will be stored using `--log-file`, the logging messages will not be displayed to the output, but to the file instead. If you want that those logging messages are also displayed to the output, this option must be set.
 
-## Example
+## Examples
 
-Example of execution where we do not provide a file but we pipe it. The embeddings do not exist, so we generate them. Different strategies are applied. Evaluation will not be carried out since has not been provided a gold standard file, but we want the output with URLs instead of the paths to the documents.
+Example of execution where we do not provide a file but we pipe it. The embeddings do not exist (the provided paths), so they are going to be generated. Different strategies are applied. Evaluation will not be carried out since has not been provided a gold standard file, but we want the output with URLs instead of the paths to the documents.
 ```bash
 # Pipe the file, generate the embeddings and do not apply evaluation
 echo -e \
-"/path/to/doc1\t/path/to/embedding1\thttps://www.this_is_a_url.com/resource1\tsrc\n"\
-"/path/to/doc2\t/path/to/embedding2\thttps://www.this_is_a_url.com/resource2\ttrg"  | \
+"/path/to/doc1\thttps://www.this_is_a_url.com/resource1\tsrc\n"\
+"/path/to/doc2\thttps://www.this_is_a_url.com/resource2\ttrg"  | \
 \
-python3 neural_document_aligner/neural_document_aligner.py - en fr \
+python3 neural_document_aligner/neural_document_aligner.py - /path/to/src/embedding/file /path/to/trg/embedding/file \
                                                            --docalign-strategy 'faiss' --weights-strategy 0 \
                                                            --merging-strategy 3 --results-strategy 0 \
-                                                           --generate-embeddings --gen-emb-optimization-strategy 2 \
-                                                           --emb-optimization-strategy 2 --output-with-urls \
+                                                           --emb-optimization-strategy 2 --gen-emb-optimization-strategy 2 \
+                                                           --output-with-urls --threshold 0.7
+```
+
+Another example where input is provided with Base64 values instead of documents, and indexes are used for output instead of documents. In this case we assume that the embeddings do exist, so they are not generated but directly processed.
+```bash
+# Pipe the file, generate the embeddings and do not apply evaluation
+echo -e \
+"TmV1cmFsIERvY3VtZW50IEFsaWduZXIKc3JjIGRvYwo=\thttps://www.this_is_a_url.com/resource1\tsrc\n"\
+"TmV1cmFsIERvY3VtZW50IEFsaWduZXIKdHJnIGRvYwo=\thttps://www.this_is_a_url.com/resource2\ttrg"  | \
+\
+python3 neural_document_aligner/neural_document_aligner.py - /path/to/src/embedding/file /path/to/trg/embedding/file \
+                                                           --docalign-strategy 'faiss' --weights-strategy 0 \
+                                                           --merging-strategy 3 --results-strategy 0 \
+                                                           --emb-optimization-strategy 2 --gen-emb-optimization-strategy 2 \
+                                                           --output-with-idxs --paths-to-docs-are-base64-values \
                                                            --threshold 0.7
 ```

@@ -4,6 +4,7 @@ import os
 import sys
 import math
 import copy
+import base64
 import logging
 import argparse
 import subprocess
@@ -24,7 +25,8 @@ import constants
 
 def generate_embeddings(docs, embedding_file, lang, generate=False, optimization_strategy=None, model=None,
                         max_mbytes_per_batch=constants.DEFAULT_MAX_MBYTES_PER_BATCH,
-                        embeddings_batch_size=constants.DEFAULT_BATCH_SIZE, sentence_splitting=constants.DEFAULT_SENTENCE_SPLITTING):
+                        embeddings_batch_size=constants.DEFAULT_BATCH_SIZE, sentence_splitting=constants.DEFAULT_SENTENCE_SPLITTING,
+                        paths_to_docs_are_base64_values=False):
     if not os.path.isfile(embedding_file) != generate:
         if generate:
             logging.error(f"Embedding #{idx} should not exist but it does")
@@ -42,7 +44,7 @@ def generate_embeddings(docs, embedding_file, lang, generate=False, optimization
 
         gen_embeddings.process(docs, [lang] * len(docs), embedding_file, optimization_strategy=optimization_strategy,
                                model=model, max_mbytes_per_batch=max_mbytes_per_batch, batch_size=embeddings_batch_size,
-                               sentence_splitting=sentence_splitting)
+                               sentence_splitting=sentence_splitting, docs_are_base64_values=paths_to_docs_are_base64_values)
 
 def get_embedding_vectors(embedding_file, dim=constants.DEFAULT_EMBEDDING_DIM, optimization_strategy=None):
     embedding = embedding_utils.load(embedding_file, dim=dim, strategy=optimization_strategy, file_is_fd=True)
@@ -66,29 +68,28 @@ def median_embedding(embedding):
 def max_embedding(embedding):
     return np.amax(embedding, axis=0)
 
-def get_weights_sl(path, cnt=len):
-    file = open(path, "r")
-#    lines = subprocess.check_output(f"sort {path}", shell=True).decode("utf-8").strip().split("\n")
-#    nolines = 0
-#    weights = np.zeros(len(lines), dtype=np.float32)
+def get_weights_sl(path, cnt=len, docs_values_instead_of_paths=False):
     weights = []
     counts = {}
     lengths = {}
     lengths_sum = 0.0
+    context_manager = utils.custom_context_manager_without_behaviour if docs_values_instead_of_paths else open
 
     # Store the length and the times a sentence appears
-    for l in file:
-#    for l in lines:
-        l = l.strip()
-        h = hash(l)
+    with context_manager(path, "r") as file:
+        if docs_values_instead_of_paths:
+            # open is not being applied, but an empty context manager
+            file = path.split("\n")
 
-        if h not in counts:
-            counts[h] = 0
-            lengths[h] = cnt(l)
+        for l in file:
+            l = l.strip()
+            h = hash(l)
 
-        counts[h] += 1
+            if h not in counts:
+                counts[h] = 0
+                lengths[h] = cnt(l)
 
-    file.close()
+            counts[h] += 1
 
     # Iterate over found sentences and calculate summ(times * length)
     for h in counts:
@@ -97,28 +98,27 @@ def get_weights_sl(path, cnt=len):
     if lengths_sum == 0:
         logging.warning("Empty or near-empty file -> not applying weights (i.e. weights = [1.0, ..., 1.0])")
 
-    file = open(path, "r")
+    with context_manager(path, "r") as file:
+        if docs_values_instead_of_paths:
+            # open is not being applied, but an empty context manager
+            file = path.split("\n")
 
-    for l in file:
-        l = l.strip()
-        h = hash(l)
+        for l in file:
+            l = l.strip()
+            h = hash(l)
 
-        if lengths_sum == 0:
-            weights.append(1.0)
-        else:
-#            weights[nolines] = (counts[h] * lengths[h]) / lengths_sum
-            weights.append((counts[h] * lengths[h]) / lengths_sum)
-#            nolines += 1
-
-    file.close()
+            if lengths_sum == 0:
+                weights.append(1.0)
+            else:
+                weights.append((counts[h] * lengths[h]) / lengths_sum)
 
     return np.float32(weights)
 
-def get_weights_sl_all(paths, cnt=len):
+def get_weights_sl_all(paths, cnt=len, docs_values_instead_of_paths=False):
     results = []
 
     for path in paths:
-        weights = get_weights_sl(path, cnt=cnt)
+        weights = get_weights_sl(path, cnt=cnt, docs_values_instead_of_paths=docs_values_instead_of_paths)
 
         results.append(weights)
 
@@ -168,46 +168,49 @@ def get_weights_idf(paths, path):
     return np.float32(weights)
 
 # paths arg must contain src and trg docs
-def get_weights_idf_all(paths):
+def get_weights_idf_all(paths, docs_values_instead_of_paths=False):
     results = []
     nodocs = len(paths)
     idx = {} # index by hash(sentence) which contains the number of times the sentence is in a document (at least once)
+    context_manager = utils.custom_context_manager_without_behaviour if docs_values_instead_of_paths else open
 
     # Iterate over all docs and count iteratively the times a sentences is in a document at least once
     for p in paths:
-        loop_file = open(p, "r")
-        found_sentences = set()
+        with context_manager(p, "r") as loop_file:
+            if docs_values_instead_of_paths:
+                loop_file = p.split("\n")
 
-        for l in loop_file:
-            l = l.strip()
-            h = hash(l)
+            found_sentences = set()
 
-            if h not in idx:
-                # Once per sentence
-                idx[h] = 0
+            for l in loop_file:
+                l = l.strip()
+                h = hash(l)
 
-            if h not in found_sentences:
-                # Once per sentence per document
-                idx[h] += 1
-                found_sentences.add(h)
+                if h not in idx:
+                    # Once per sentence
+                    idx[h] = 0
 
-        loop_file.close()
+                if h not in found_sentences:
+                    # Once per sentence per document
+                    idx[h] += 1
+                    found_sentences.add(h)
 
     # Iterate over all docs and calculate idf for every doc
     for p in paths:
-        loop_file = open(p, "r")
-        weights = []
+        with context_manager(p, "r") as loop_file:
+            if docs_values_instead_of_paths:
+                loop_file = p.split("\n")
 
-        for l in loop_file:
-            l = l.strip()
-            h = hash(l)
-            r = 1.0 + np.log(nodocs / idx[h])
+            weights = []
 
-            weights.append(r)
+            for l in loop_file:
+                l = l.strip()
+                h = hash(l)
+                r = 1.0 + np.log(nodocs / idx[h])
 
-        results.append(np.float32(weights))
+                weights.append(r)
 
-        loop_file.close()
+            results.append(np.float32(weights))
 
     return results
 
@@ -220,28 +223,27 @@ def get_weights_slidf(paths, path, cnt=len):
 
     return sl_weights * idf_weights
 
-def get_weights_slidf_all(paths, cnt=len):
+def get_weights_slidf_all(paths, cnt=len, docs_values_instead_of_paths=False):
     results = []
 
-    idf_weights = get_weights_idf_all(paths)
+    idf_weights = get_weights_idf_all(paths, docs_values_instead_of_paths=docs_values_instead_of_paths)
     sl_weights = []
 
     for p in paths:
-        sl_weights.append(get_weights_sl(p, cnt))
+        sl_weights.append(get_weights_sl(p, cnt=cnt, docs_values_instead_of_paths=docs_values_instead_of_paths))
 
     if len(idf_weights) != len(sl_weights):
         logging.warning(f"Different length of idf weights ({len(idf_weights)}) and sl weights ({len(sl_weights)})")
 
     for idx in range(len(sl_weights)):
         if len(sl_weights[idx]) != len(idf_weights[idx]):
-            logging.warning(f"Different length of idf weights ({len(idf_weights)}) and sl weights ({len(sl_weights)}) for index {idx}, whose document should be '{paths[idx]}'")
+            logging.warning(f"Different length of idf weights ({len(idf_weights)}) and sl weights ({len(sl_weights)}) for index {idx} ({len(idf_weights[idx])} vs {len(sl_weights[idx])})")
 
         results.append(sl_weights[idx] * idf_weights[idx])
 
     return results
-#    return get_weights_sl(path, cnt) * get_weights_idf(paths, path)
 
-def weight_embeddings(embeddings, paths, weights_strategy=0):
+def weight_embeddings(embeddings, paths, weights_strategy=0, docs_values_instead_of_paths=False):
     if weights_strategy == 0:
         # Do not apply any strategy
         return embeddings
@@ -252,21 +254,15 @@ def weight_embeddings(embeddings, paths, weights_strategy=0):
         raise Exception(f"the number of embeddings do not match with the number of paths ({len(embeddings)} vs {len(paths)})")
 
     get_weights_function = None
-    weights_args = None
-    weights_kwargs = None
+    weights_args = [paths]
+    weights_kwargs = {"docs_values_instead_of_paths": docs_values_instead_of_paths}
 
     if weights_strategy == 1:
         get_weights_function = get_weights_sl_all
-        weights_args = [paths]
-        weights_kwargs = {}
     elif weights_strategy == 2:
         get_weights_function = get_weights_idf_all
-        weights_args = [paths]
-        weights_kwargs = {}
     elif weights_strategy == 3:
         get_weights_function = get_weights_slidf_all
-        weights_args = [paths]
-        weights_kwargs = {}
     else:
         raise Exception(f"unknown weight strategy: {weights_strategy}")
 
@@ -501,6 +497,7 @@ def union_and_intersection(aligned_urls):
 
 def process_input_file(args, max_noentries=None):
     input_file = args.input_file
+    paths_to_docs_are_base64_values = args.paths_to_docs_are_base64_values
 
     src_docs, trg_docs = [], []
     src_urls, trg_urls = [], []
@@ -533,6 +530,7 @@ def process_input_file(args, max_noentries=None):
             logging.warning(f"Unexpected format in line #{idx + 1} (it will be skipped)")
             continue
 
+        # Get src or trg data structures
         docs_vector = src_docs
         urls_vector = src_urls
 
@@ -544,7 +542,12 @@ def process_input_file(args, max_noentries=None):
         if (get_docs and line[0] == "-"):
             get_docs = False
         if get_docs:
-            docs_vector.append(utils.expand_and_real_path_and_exists(line[0], raise_exception=True))
+            # The provided docs might be base64 values
+
+            if paths_to_docs_are_base64_values:
+                docs_vector.append(line[0])
+            else:
+                docs_vector.append(utils.expand_and_real_path_and_exists(line[0], raise_exception=True))
 
         # Optional URLs
         if (get_urls and line[1] == "-"):
@@ -626,8 +629,10 @@ def preprocess(src_docs, trg_docs, src_embeddings, trg_embeddings, **kwargs):
     # Apply weights to embeddings
     if "weights_strategy" in kwargs:
         weights_strategy = kwargs["weights_strategy"]
+        providing_values_instead_of_paths = kwargs["providing_values_instead_of_paths"] if "providing_values_instead_of_paths" in kwargs else False
 
-        embeddings = weight_embeddings(src_embeddings + trg_embeddings, src_docs + trg_docs, weights_strategy=weights_strategy)
+        embeddings = weight_embeddings(src_embeddings + trg_embeddings, src_docs + trg_docs, weights_strategy=weights_strategy,
+                                       docs_values_instead_of_paths=providing_values_instead_of_paths)
 
         if len(src_embeddings) + len(trg_embeddings) != len(embeddings):
             raise Exception(f"unexpected length after applying the weights. Expected length: {len(src_embeddings) + len(trg_embeddings)}. Actual length: {len(embeddings)}")
@@ -670,7 +675,7 @@ def preprocess(src_docs, trg_docs, src_embeddings, trg_embeddings, **kwargs):
         for embeddings in (src_embeddings, trg_embeddings):
             embeddings[0:] = apply_mask(embeddings, mask, check_zeros_mask=check_zeros_mask)
 
-    return src_docs, trg_docs, src_embeddings, trg_embeddings
+    return src_embeddings, trg_embeddings
 
 def get_faiss(src_docs, trg_docs, src_embeddings, trg_embeddings, take_knn=5, faiss_reverse_direction=False,
               dim=constants.DEFAULT_EMBEDDING_DIM, threshold=None):
@@ -957,6 +962,7 @@ def main(args):
     do_not_show_scores = args.do_not_show_scores
     output_with_idxs = args.output_with_idxs
     sentence_splitting = args.sentence_splitting
+    paths_to_docs_are_base64_values = args.paths_to_docs_are_base64_values
     # Not args
     do_not_merge_on_preprocessing = docalign_strategy_applies_own_embedding_merging(docalign_strategy)
     docs_were_not_provided = False
@@ -971,6 +977,14 @@ def main(args):
 
     # Process input file
     src_docs, trg_docs, src_urls, trg_urls = process_input_file(args, max_noentries)
+    src_docs_values, trg_docs_values = [], []
+
+    # Load src and trg values if needed
+    if paths_to_docs_are_base64_values:
+        # src_docs and trg_docs will work as identifiers of the documents, will not contain the docs values
+        src_docs_values, trg_docs_values = src_docs, trg_docs
+        src_docs = [f"src_doc_at_line_{i}" for i in range(len(src_docs_values))]
+        trg_docs = [f"trg_doc_at_line_{i}" for i in range(len(trg_docs_values))]
 
     # Check if the documents' path were provided
     if ((len(src_docs) != 0 and src_docs[0] is None) or
@@ -1002,13 +1016,16 @@ def main(args):
         raise Exception("if you want to sentence-splitting before the generation of the trg embeddings, you need to provide the trg lang")
 
     # Generate embeddings (if needed)
-    generate_embeddings(src_docs, src_embeddings_path, src_lang, generate=not src_embeddings_path_exist,
+    generate_embeddings(src_docs_values if paths_to_docs_are_base64_values else src_docs, src_embeddings_path, src_lang, generate=not src_embeddings_path_exist,
                         optimization_strategy=gen_emb_optimization_strategy, model=model, max_mbytes_per_batch=max_mbytes_per_batch,
-                        embeddings_batch_size=embeddings_batch_size, sentence_splitting=sentence_splitting)
-    generate_embeddings(trg_docs, trg_embeddings_path, trg_lang, generate=not trg_embeddings_path_exist,
+                        embeddings_batch_size=embeddings_batch_size, sentence_splitting=sentence_splitting,
+                        paths_to_docs_are_base64_values=paths_to_docs_are_base64_values)
+    generate_embeddings(trg_docs_values if paths_to_docs_are_base64_values else trg_docs, trg_embeddings_path, trg_lang, generate=not trg_embeddings_path_exist,
                         optimization_strategy=gen_emb_optimization_strategy, model=model, max_mbytes_per_batch=max_mbytes_per_batch,
-                        embeddings_batch_size=embeddings_batch_size, sentence_splitting=sentence_splitting)
+                        embeddings_batch_size=embeddings_batch_size, sentence_splitting=sentence_splitting,
+                        paths_to_docs_are_base64_values=paths_to_docs_are_base64_values)
 
+    # Just generate embeddings?
     if generate_and_finish:
         if (src_embeddings_path_exist and trg_embeddings_path_exist):
             logging.warning("The embeddings have not been generated, since the provided files already exist, but the execution is going to finish because --generate-and-finish have been set")
@@ -1016,6 +1033,11 @@ def main(args):
             logging.info("The embeddings have been generated and the execution is going to finish")
 
         return
+
+    # Get decoded values from base64, if base64 values were provided instead of paths, since they are no longer required base64-encoded
+    if paths_to_docs_are_base64_values:
+        src_docs_values = list(map(lambda doc_value: base64.b64decode(doc_value).decode("utf-8").rstrip(), src_docs_values))
+        trg_docs_values = list(map(lambda doc_value: base64.b64decode(doc_value).decode("utf-8").rstrip(), trg_docs_values))
 
     src_embeddings = []
     trg_embeddings = []
@@ -1047,7 +1069,7 @@ def main(args):
             for docs, embeddings, label in [(src_docs, src_embeddings, "source"), (trg_docs, trg_embeddings, "target")]:
                 for idx, (doc, embedding) in enumerate(zip(docs[start_idx:min(len(docs), min_sanity_check, end_idx)],
                                                            embeddings[start_idx:min(len(embeddings), min_sanity_check, end_idx)])):
-                    if doc is None:
+                    if (doc is None or paths_to_docs_are_base64_values):
                         nolines = embedding.shape[0] if embedding.shape[0] != 0 else 1
                     else:
                         nolines = utils.get_nolines(doc)
@@ -1065,10 +1087,13 @@ def main(args):
                         raise Exception(f"unexpected dimension of embedding ({label} - {idx}) according to the provided dim. Expected dim is {dim}. Actual dim: {embedding.shape[1]}")
 
         # Preprocess embeddings
-        src_docs[start_idx:end_idx], trg_docs[start_idx:end_idx], src_embeddings[start_idx:end_idx], trg_embeddings[start_idx:end_idx] = \
-            preprocess(src_docs[start_idx:end_idx], trg_docs[start_idx:end_idx], src_embeddings[start_idx:end_idx], trg_embeddings[start_idx:end_idx],
+        src_embeddings[start_idx:end_idx], trg_embeddings[start_idx:end_idx] = \
+            preprocess(src_docs_values[start_idx:end_idx] if paths_to_docs_are_base64_values else src_docs[start_idx:end_idx],
+                       trg_docs_values[start_idx:end_idx] if paths_to_docs_are_base64_values else trg_docs[start_idx:end_idx],
+                       src_embeddings[start_idx:end_idx], trg_embeddings[start_idx:end_idx],
                        weights_strategy=weights_strategy, merging_strategy=merging_strategy, mask_value=mask_value,
-                       check_zeros_mask=args.check_zeros_mask, do_not_merge_on_preprocessing=do_not_merge_on_preprocessing)
+                       check_zeros_mask=args.check_zeros_mask, do_not_merge_on_preprocessing=do_not_merge_on_preprocessing,
+                       providing_values_instead_of_paths=paths_to_docs_are_base64_values)
 
     src_embeddings_fd.close()
     trg_embeddings_fd.close()
@@ -1110,7 +1135,7 @@ def main(args):
             faiss_args = [src_urls, trg_urls, src_embeddings, trg_embeddings]
 
         if faiss_reverse_direction:
-            faiss_args.reverse()
+            faiss_args = [faiss_args[1], faiss_args[0], faiss_args[3], faiss_args[2]]
 
         results_faiss = get_faiss(*faiss_args, take_knn=int(faiss_take_knn), faiss_reverse_direction=faiss_reverse_direction,
                                   dim=dim, threshold=threshold)
@@ -1274,6 +1299,8 @@ if __name__ == '__main__':
         help='The sentence-level embeddings have to be loaded in memory, but this might be a problem if there is not sufficient memory available. With this option, the quantity of sentence-level embeddings loaded in memory at once can be configured in order to avoid to get run out of memory (once this embeddings have been loaded, they will become into document-level embeddings). The default value is 1000')
     parser.add_argument('--process-max-entries', metavar='N', default=None, type=int,
         help='Process only the first nth entries of the input file. The default value is process all entries')
+    parser.add_argument('--paths-to-docs-are-base64-values', action="store_true",
+        help='The first column of the input file is expected to be, if provided, paths to docs which will be aligned. If this option is set, the expected value will be the base64 value of the docs instead. This option will use extra memory')
     ## Faiss
     parser.add_argument('--faiss-reverse-direction', action='store_true',
         help='Instead of index source docs and match with target docs, reverse the direction')

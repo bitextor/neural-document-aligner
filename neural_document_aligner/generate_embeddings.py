@@ -3,6 +3,7 @@
 import re
 import os
 import sys
+import base64
 import logging
 import argparse
 import tempfile
@@ -109,7 +110,7 @@ def generate_embeddings(batch_docs, batch_langs, embeddings_output_fd, langs_to_
     generate_and_store_embeddings(content, embeddings_output_fd, no_sentences, optimization_strategy=optimization_strategy,
                                   input_is_list_of_sentences=True, model=model, batch_size=batch_size)
 
-def buffered_read_from_list(inputs, buffer_size_mb):
+def buffered_read_from_list(inputs, buffer_size_mb, docs_are_base64_values=False):
     """Read from a list of inputs where each element is expected
        to be the path of a file which exists
     """
@@ -118,8 +119,14 @@ def buffered_read_from_list(inputs, buffer_size_mb):
     current_bytes = 0
 
     for input in inputs:
-        with open(input) as f:
-            buffer.append(f.buffer.read())
+        # Append file content (binary)
+        if docs_are_base64_values:
+            buffer.append(base64.b64decode(input))
+        else:
+            with open(input) as f:
+                buffer.append(f.buffer.read())
+
+        # Process binary data
 
         current_bytes += len(buffer[-1])
 
@@ -194,6 +201,7 @@ def process(docs, langs, embeddings_output, **kwargs):
     model = kwargs["model"] if "model" in kwargs else DEFAULT_VALUES["model"]
     batch_size = kwargs["batch_size"] if "batch_size" in kwargs else DEFAULT_VALUES["batch_size"]
     sentence_splitting = kwargs["sentence_splitting"] if "sentence_splitting" in kwargs else DEFAULT_VALUES["sentence_splitting"]
+    docs_are_base64_values = kwargs["docs_are_base64_values"] if "docs_are_base64_values" in kwargs else False
 
     no_processed_files = 0
     no_processed_batches = 0
@@ -211,7 +219,7 @@ def process(docs, langs, embeddings_output, **kwargs):
         raise Exception(f"you want to sentence-splitting but did not provide the langs, which is necessary")
 
     # Process batches by size (max. size is 'max_size_per_batch')
-    for batch, (batch_docs, bytes_length_batch, (idx_start, idx_end)) in enumerate(buffered_read_from_list(docs, max_size_per_batch)):
+    for batch, (batch_docs, bytes_length_batch, (idx_start, idx_end)) in enumerate(buffered_read_from_list(docs, max_size_per_batch, docs_are_base64_values=docs_are_base64_values)):
         size += bytes_length_batch
 
         logging.debug(f"Batch #{batch} of {float(bytes_length_batch / 1000.0 / 1000.0):.2f} MB from a max. of {max_size_per_batch} MB ({len(batch_docs)} lines)")
@@ -263,12 +271,14 @@ def main(args):
     model = args.model
     batch_size = args.batch_size
     sentence_splitting = args.sentence_splitting
+    paths_to_docs_are_base64_values = args.paths_to_docs_are_base64_values
 
     docs, langs = process_input_file(input_file)
 
     process(docs, langs, output_file, langs_to_process=langs_to_process, max_mbytes_per_batch=max_size_per_batch,
             max_batches_process=max_batches_process, group=group, max_group=max_group, batch_size=batch_size,
-            optimization_strategy=optimization_strategy, model=model, sentence_splitting=sentence_splitting)
+            optimization_strategy=optimization_strategy, model=model, sentence_splitting=sentence_splitting,
+            docs_are_base64_values=paths_to_docs_are_base64_values)
 
 def check_args(args):
     assert args.max_groups > 0, "The max. number of groups must be greater than 0"
@@ -323,6 +333,8 @@ if __name__ == '__main__':
                         help='Store the embeddings using an optimization strategy. Default value is do not apply any optimization')
     parser.add_argument('--sentence-splitting', action='store_true',
                         help='Apply sentence splitting to the documents. You will need to provide the langs in the input file if you want to apply the sentence splitter')
+    parser.add_argument('--paths-to-docs-are-base64-values', action='store_true',
+                        help='The first column of the input file is expected to be paths to docs. If this option is set, the expected value will be the base64 value of the docs instead')
     # Logging
     parser.add_argument('--logging-level', metavar='N', type=int, default=DEFAULT_VALUES['logging_level'],
                         help=f'Logging level. Default value is {DEFAULT_VALUES["logging_level"]}')
