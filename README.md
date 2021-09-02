@@ -236,7 +236,6 @@ There are different parameters in order to achieve different behaviours:
 
 Example of execution where we do not provide a file but we pipe it. The embeddings do not exist (the provided paths), so they are going to be generated. Different strategies are applied. Evaluation will not be carried out since has not been provided a gold standard file, but we want the output with URLs instead of the paths to the documents.
 ```bash
-# Pipe the file, generate the embeddings and do not apply evaluation
 echo -e \
 "/path/to/doc1\thttps://www.this_is_a_url.com/resource1\tsrc\n"\
 "/path/to/doc2\thttps://www.this_is_a_url.com/resource2\ttrg"  | \
@@ -250,7 +249,6 @@ neural-document-aligner - /path/to/src/embedding/file /path/to/trg/embedding/fil
 
 Another example where input is provided with Base64 values instead of documents, and indexes are used for output instead of documents. In this case we assume that the embeddings do exist, so they are not generated but directly processed.
 ```bash
-# Pipe the file, generate the embeddings and do not apply evaluation
 echo -e \
 "TmV1cmFsIERvY3VtZW50IEFsaWduZXIKc3JjIGRvYwo=\thttps://www.this_is_a_url.com/resource1\tsrc\n"\
 "TmV1cmFsIERvY3VtZW50IEFsaWduZXIKdHJnIGRvYwo=\thttps://www.this_is_a_url.com/resource2\ttrg"  | \
