@@ -354,7 +354,8 @@ def iterative_average_embedding(embedding):
     return result
 
 def average_embedding(embedding):
-    assert len(embedding.shape) == 2, f"Unexpected shape ({len(embedding.shape)} vs 2)"
+    if len(embedding.shape) != 2:
+        raise Exception(f"Unexpected shape ({len(embedding.shape)} vs 2)")
 
     return np.mean(embedding, axis=0, dtype=embedding.dtype)
 
@@ -706,8 +707,10 @@ def get_faiss(src_docs, trg_docs, src_embeddings, trg_embeddings, take_knn=5, fa
             embedding = copy.copy(embedding_data)
             embedding = np.array(embedding)
 
-            assert len(embedding.shape) == 1, f"The shape length of the {label} embedding must be 1, but is {len(embedding.shape)}"
-            assert embedding.shape[0] == dim, f"The shape of the {label} embedding is {embedding.shape[0]}, but it must be {dim}"
+            if len(embedding.shape) != 1:
+                raise Exception(f"The shape length of the {label} embedding must be 1, but is {len(embedding.shape)}")
+            if embedding.shape[0] != dim:
+                raise Exception(f"The shape of the {label} embedding is {embedding.shape[0]}, but it must be {dim}")
 
             embedding_vectors.append(embedding)
 

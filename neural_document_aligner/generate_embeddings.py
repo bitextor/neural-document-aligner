@@ -281,11 +281,17 @@ def main(args):
             docs_are_base64_values=paths_to_docs_are_base64_values)
 
 def check_args(args):
-    assert args.max_groups > 0, "The max. number of groups must be greater than 0"
-    assert args.group >= 0, "The group ID must be greater or equal than 0"
-    assert args.max_groups > args.group, "The group ID has to be fewer than the max. number of groups"
-    assert args.langs_to_process != ""
-    assert args.max_mbytes_per_batch > 0, "The max. MB has to be greater or equal than 0"
+    errors = [
+        (args.max_groups <= 0, "The max. number of groups must be greater than 0"),
+        (args.group < 0, "The group ID must be greater or equal than 0"),
+        (args.max_groups <= args.group, "The group ID has to be fewer than the max. number of groups"),
+        (args.langs_to_process == "", "The provided langs to process cannot contain an empty string"),
+        (args.max_mbytes_per_batch <= 0, "The max. MB has to be greater or equal than 0"),
+    ]
+
+    for condition, msg in errors:
+        if condition:
+            raise Exception(msg)
 
 def is_file(file, f=os.path.isfile):
     if not f(os.path.abspath(os.path.expanduser(file))):
