@@ -9,7 +9,22 @@ Besides, the tool has been implemented to be ready to be as modular as possible 
 
 ## Installation
 
-To install `neural-document-aligner`, first clone the repository:
+First, you will need Python 3.8.5, and in order to install this dependency, you can use, optionally, Miniconda3:
+
+```bash
+# install Miniconda3 (interactive)
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+bash Miniconda3-latest-Linux-x86_64.sh
+
+# add necessary/common channels
+conda config --add channels conda-forge
+
+# create your environment
+conda create -n nda-environment python=3.8.5
+conda activate nda-environment
+```
+
+To install `neural-document-aligner`, clone the repository:
 
 ```bash
 git clone https://github.com/bitextor/neural-document-aligner.git
@@ -20,27 +35,47 @@ Once the repository has been cloned, run:
 ```bash
 cd neural-document-aligner
 
+# WARNING: if you are using Miniconda3, do NOT run the following commands
 # create virtual environment & activate
 python3 -m venv /path/to/virtual/environment
 source /path/to/virtual/environment/bin/activate
 
 # install dependencies in virtual enviroment
 pip3 install --upgrade pip
-pip3 install -r requirements.txt
 ```
+
+If you want to be able to call `neural-document-aligner` independently of your current working directory (recommended option):
+
+```bash
+pip3 install .
+
+# Now, you can execute the aligner
+neural-document-aligner
+```
+
+If not, you can apply the manual installation (you will need to use `python3` to execute the aligner):
+
+```bash
+pip3 install -r requirements.txt
+
+# Now, you can execute the aligner
+python3 neural_document_aligner/neural_document_aligner.py
+```
+
+Once installed, take into account that the installed dependencies, many of them, use GPU. **Be aware** that you might need to change or install some dependencies in order to be able to run the aligner, since the specific versions might need to be different for your GPU specifications (this is very important in the case of pytorch and CUDA tools like cuda toolkit, cuDNN, driver version, ...). If this is your case, check out [this page from the wiki](https://github.com/bitextor/neural-document-aligner/wiki/My-GPU-is-not-supported-with-the-default-dependencies).
 
 ## Usage
 
 You can easily check the different options running:
 
 ```bash
-python3 neural_document_aligner/neural_document_aligner.py --help
+neural-document-aligner --help
 ```
 
 The different parameters are:
 
 ```bash
-usage: neural_document_aligner.py [-h]
+usage: neural-document-aligner.py [-h]
                                   [--docalign-strategy {faiss,lev,lev-full,just-merge}]
                                   [--weights-strategy {0,1,2,3}]
                                   [--merging-strategy {0,1,2,3,4,5}]
@@ -206,11 +241,11 @@ echo -e \
 "/path/to/doc1\thttps://www.this_is_a_url.com/resource1\tsrc\n"\
 "/path/to/doc2\thttps://www.this_is_a_url.com/resource2\ttrg"  | \
 \
-python3 neural_document_aligner/neural_document_aligner.py - /path/to/src/embedding/file /path/to/trg/embedding/file \
-                                                           --docalign-strategy 'faiss' --weights-strategy 0 \
-                                                           --merging-strategy 3 --results-strategy 0 \
-                                                           --emb-optimization-strategy 2 --gen-emb-optimization-strategy 2 \
-                                                           --output-with-urls --threshold 0.7
+neural-document-aligner - /path/to/src/embedding/file /path/to/trg/embedding/file \
+                        --docalign-strategy 'faiss' --weights-strategy 0 \
+                        --merging-strategy 3 --results-strategy 0 \
+                        --emb-optimization-strategy 2 --gen-emb-optimization-strategy 2 \
+                        --output-with-urls --threshold 0.7
 ```
 
 Another example where input is provided with Base64 values instead of documents, and indexes are used for output instead of documents. In this case we assume that the embeddings do exist, so they are not generated but directly processed.
@@ -220,10 +255,10 @@ echo -e \
 "TmV1cmFsIERvY3VtZW50IEFsaWduZXIKc3JjIGRvYwo=\thttps://www.this_is_a_url.com/resource1\tsrc\n"\
 "TmV1cmFsIERvY3VtZW50IEFsaWduZXIKdHJnIGRvYwo=\thttps://www.this_is_a_url.com/resource2\ttrg"  | \
 \
-python3 neural_document_aligner/neural_document_aligner.py - /path/to/src/embedding/file /path/to/trg/embedding/file \
-                                                           --docalign-strategy 'faiss' --weights-strategy 0 \
-                                                           --merging-strategy 3 --results-strategy 0 \
-                                                           --emb-optimization-strategy 2 --gen-emb-optimization-strategy 2 \
-                                                           --output-with-idxs --paths-to-docs-are-base64-values \
-                                                           --threshold 0.7
+neural-document-aligner - /path/to/src/embedding/file /path/to/trg/embedding/file \
+                        --docalign-strategy 'faiss' --weights-strategy 0 \
+                        --merging-strategy 3 --results-strategy 0 \
+                        --emb-optimization-strategy 2 --gen-emb-optimization-strategy 2 \
+                        --output-with-idxs --paths-to-docs-are-base64-values \
+                        --threshold 0.7
 ```

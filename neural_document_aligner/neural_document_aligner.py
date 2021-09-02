@@ -15,6 +15,8 @@ from multiprocessing import Process, Pool
 
 import faiss
 
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 import utils.utils as utils
 import utils.embedding_utils as embedding_utils
 import generate_embeddings as gen_embeddings
