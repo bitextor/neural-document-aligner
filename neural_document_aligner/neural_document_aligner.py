@@ -28,7 +28,7 @@ import constants
 def generate_embeddings(docs, embedding_file, lang, generate=False, optimization_strategy=None, model=None,
                         max_mbytes_per_batch=constants.DEFAULT_MAX_MBYTES_PER_BATCH,
                         embeddings_batch_size=constants.DEFAULT_BATCH_SIZE, sentence_splitting=constants.DEFAULT_SENTENCE_SPLITTING,
-                        paths_to_docs_are_base64_values=False):
+                        paths_to_docs_are_base64_values=False, max_nolines_per_batch=constants.DEFAULT_MAX_NOLINES_PER_BATCH):
     if not os.path.isfile(embedding_file) != generate:
         if generate:
             logging.error(f"Embedding #{idx} should not exist but it does")
@@ -46,7 +46,8 @@ def generate_embeddings(docs, embedding_file, lang, generate=False, optimization
 
         gen_embeddings.process(docs, [lang] * len(docs), embedding_file, optimization_strategy=optimization_strategy,
                                model=model, max_mbytes_per_batch=max_mbytes_per_batch, batch_size=embeddings_batch_size,
-                               sentence_splitting=sentence_splitting, docs_are_base64_values=paths_to_docs_are_base64_values)
+                               sentence_splitting=sentence_splitting, docs_are_base64_values=paths_to_docs_are_base64_values,
+                               max_nolines_per_batch=max_nolines_per_batch)
 
 def get_embedding_vectors(embedding_file, dim=constants.DEFAULT_EMBEDDING_DIM, optimization_strategy=None):
     embedding = embedding_utils.load(embedding_file, dim=dim, strategy=optimization_strategy, file_is_fd=True)
@@ -84,7 +85,7 @@ def get_weights_sl(path, cnt=len, docs_values_instead_of_paths=False):
             file = path.split("\n")
 
         for l in file:
-            l = l.strip()
+            l = l.strip()[:constants.DEFAULT_MAX_SENTENCES_LENGTH]
             h = hash(l)
 
             if h not in counts:
@@ -106,7 +107,7 @@ def get_weights_sl(path, cnt=len, docs_values_instead_of_paths=False):
             file = path.split("\n")
 
         for l in file:
-            l = l.strip()
+            l = l.strip()[:constants.DEFAULT_MAX_SENTENCES_LENGTH]
             h = hash(l)
 
             if lengths_sum == 0:
@@ -135,7 +136,7 @@ def get_weights_idf(paths, path):
 
     # Initializate weights and store indexes of sentences by the hash of the sentence
     for i, l in enumerate(file):
-        l = l.strip()
+        l = l.strip()[:constants.DEFAULT_MAX_SENTENCES_LENGTH]
         h = hash(l)
 
         if h not in idx:
@@ -153,7 +154,7 @@ def get_weights_idf(paths, path):
         found_sentences = set()
 
         for l in loop_file:
-            l = l.strip()
+            l = l.strip()[:constants.DEFAULT_MAX_SENTENCES_LENGTH]
             h = hash(l)
 
             if (h in idx and h not in found_sentences):
@@ -185,7 +186,7 @@ def get_weights_idf_all(paths, docs_values_instead_of_paths=False):
             found_sentences = set()
 
             for l in loop_file:
-                l = l.strip()
+                l = l.strip()[:constants.DEFAULT_MAX_SENTENCES_LENGTH]
                 h = hash(l)
 
                 if h not in idx:
@@ -206,7 +207,7 @@ def get_weights_idf_all(paths, docs_values_instead_of_paths=False):
             weights = []
 
             for l in loop_file:
-                l = l.strip()
+                l = l.strip()[:constants.DEFAULT_MAX_SENTENCES_LENGTH]
                 h = hash(l)
                 r = 1.0 + np.log(nodocs / idx[h])
 
@@ -355,7 +356,7 @@ def iterative_average_embedding(embedding):
 
 def average_embedding(embedding):
     if len(embedding.shape) != 2:
-        raise Exception(f"Unexpected shape ({len(embedding.shape)} vs 2)")
+        raise Exception(f"unexpected shape ({len(embedding.shape)} vs 2)")
 
     return np.mean(embedding, axis=0, dtype=embedding.dtype)
 
@@ -620,7 +621,7 @@ def apply_mask(embeddings, mask, check_zeros_mask=False):
             for idx2, embedding2 in enumerate(embedding):
                 embeddings[idx][idx2] = embedding2 * mask
         else:
-            raise Exception("unexpected shape length: {len(embedding.shape)}")
+            raise Exception(f"unexpected shape length: {len(embedding.shape)}")
 
         if check_zeros_mask:
             # Remove components of the embeddings where the mask value is 0.0
@@ -708,9 +709,9 @@ def get_faiss(src_docs, trg_docs, src_embeddings, trg_embeddings, take_knn=5, fa
             embedding = np.array(embedding)
 
             if len(embedding.shape) != 1:
-                raise Exception(f"The shape length of the {label} embedding must be 1, but is {len(embedding.shape)}")
+                raise Exception(f"the shape length of the {label} embedding must be 1, but is {len(embedding.shape)}")
             if embedding.shape[0] != dim:
-                raise Exception(f"The shape of the {label} embedding is {embedding.shape[0]}, but it must be {dim}")
+                raise Exception(f"the shape of the {label} embedding is {embedding.shape[0]}, but it must be {dim}")
 
             embedding_vectors.append(embedding)
 
@@ -957,6 +958,7 @@ def main(args):
     generate_and_finish = args.generate_and_finish
     model = args.model
     max_mbytes_per_batch = args.max_mbytes_per_batch
+    max_nolines_per_batch = args.max_nolines_per_batch
     max_loaded_sent_embs_at_once = args.max_loaded_sent_embs_at_once
     apply_heuristics = args.apply_heuristics
     threshold = args.threshold
@@ -1021,11 +1023,11 @@ def main(args):
     generate_embeddings(src_docs_values if paths_to_docs_are_base64_values else src_docs, src_embeddings_path, src_lang, generate=not src_embeddings_path_exist,
                         optimization_strategy=gen_emb_optimization_strategy, model=model, max_mbytes_per_batch=max_mbytes_per_batch,
                         embeddings_batch_size=embeddings_batch_size, sentence_splitting=sentence_splitting,
-                        paths_to_docs_are_base64_values=paths_to_docs_are_base64_values)
+                        paths_to_docs_are_base64_values=paths_to_docs_are_base64_values, max_nolines_per_batch=max_nolines_per_batch)
     generate_embeddings(trg_docs_values if paths_to_docs_are_base64_values else trg_docs, trg_embeddings_path, trg_lang, generate=not trg_embeddings_path_exist,
                         optimization_strategy=gen_emb_optimization_strategy, model=model, max_mbytes_per_batch=max_mbytes_per_batch,
                         embeddings_batch_size=embeddings_batch_size, sentence_splitting=sentence_splitting,
-                        paths_to_docs_are_base64_values=paths_to_docs_are_base64_values)
+                        paths_to_docs_are_base64_values=paths_to_docs_are_base64_values, max_nolines_per_batch=max_nolines_per_batch)
 
     # Just generate embeddings?
     if generate_and_finish:
@@ -1037,9 +1039,10 @@ def main(args):
         return
 
     # Get decoded values from base64, if base64 values were provided instead of paths, since they are no longer required base64-encoded
+    # The values are clipped in order to avoid LONG sentences
     if paths_to_docs_are_base64_values:
-        src_docs_values = list(map(lambda doc_value: base64.b64decode(doc_value).decode("utf-8").rstrip(), src_docs_values))
-        trg_docs_values = list(map(lambda doc_value: base64.b64decode(doc_value).decode("utf-8").rstrip(), trg_docs_values))
+        src_docs_values = list(map(lambda doc_value: base64.b64decode(doc_value).decode("utf-8").rstrip()[:constants.DEFAULT_MAX_SENTENCES_LENGTH], src_docs_values))
+        trg_docs_values = list(map(lambda doc_value: base64.b64decode(doc_value).decode("utf-8").rstrip()[:constants.DEFAULT_MAX_SENTENCES_LENGTH], trg_docs_values))
 
     src_embeddings = []
     trg_embeddings = []
@@ -1119,7 +1122,7 @@ def main(args):
         embeddings_dim = len(trg_embeddings[0][0]) if (len(trg_embeddings) > 0 and len(trg_embeddings[0]) > 0 and embeddings_dim is None) else embeddings_dim
 
     if (embeddings_dim is None and src_embeddings_path_exist and trg_embeddings_path_exist):
-        logging.warning(f"Could not infer the dimension of the embeddings")
+        logging.warning("Could not infer the dimension of the embeddings")
     elif (embeddings_dim != dim and embeddings_dim is not None):
         logging.info(f"Dimension updated from {dim} to {embeddings_dim}")
         dim = embeddings_dim
@@ -1273,7 +1276,9 @@ def parse_args():
     parser.add_argument('--trg-lang', default=None,
         help='Target documents language')
     parser.add_argument('--max-mbytes-per-batch', default=constants.DEFAULT_MAX_MBYTES_PER_BATCH, type=int, metavar='N',
-        help=f'Max. MB which will be used per batch when generating embeddings (the size is not guaranteed). The default value is {constants.DEFAULT_MAX_MBYTES_PER_BATCH}')
+        help=f'Max. MB which will be used per batch when generating embeddings (the size is not guaranteed). You can provide -1 to disable this limit. The default value is {constants.DEFAULT_MAX_MBYTES_PER_BATCH}')
+    parser.add_argument('--max-nolines-per-batch', default=constants.DEFAULT_MAX_NOLINES_PER_BATCH, type=int, metavar='N',
+        help=f'Max. number of lines which will be used per batch when generating embeddings. You can provide -1 to disable this limit. The default value is {constants.DEFAULT_MAX_NOLINES_PER_BATCH}')
     parser.add_argument('--embeddings-batch-size', default=constants.DEFAULT_BATCH_SIZE, type=int, metavar='N',
         help=f'Batch size for the embeddings generation. The default value is {constants.DEFAULT_BATCH_SIZE}')
     parser.add_argument('--generate-and-finish', action="store_true",

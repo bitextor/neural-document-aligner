@@ -7,6 +7,7 @@ import base64
 import logging
 import argparse
 import tempfile
+from psutil import virtual_memory
 
 import numpy as np
 from sentence_transformers import SentenceTransformer, util
@@ -21,6 +22,7 @@ import constants
 DEFAULT_VALUES = {
     "langs_to_process": "-",
     "max_mbytes_per_batch": constants.DEFAULT_MAX_MBYTES_PER_BATCH,
+    "max_nolines_per_batch": constants.DEFAULT_MAX_NOLINES_PER_BATCH,
     "max_batches_process": np.inf,
     "group": 0,
     "max_groups": 1,
@@ -29,10 +31,11 @@ DEFAULT_VALUES = {
     "model": constants.DEFAULT_ST_MODEL,
     "batch_size": constants.DEFAULT_BATCH_SIZE,
     "sentence_splitting": constants.DEFAULT_SENTENCE_SPLITTING,
+    "max_sentences_length": constants.DEFAULT_MAX_SENTENCES_LENGTH,
 }
 
-def get_embedding_from_sentence_transformer(list_of_sentences, optimization_strategy=None, model=constants.DEFAULT_EMBEDDING_DIM,
-                                            batch_size=constants.DEFAULT_BATCH_SIZE):
+def get_embedding_from_sentence_transformer(list_of_sentences, optimization_strategy=None, model=DEFAULT_VALUES["model"],
+                                            batch_size=DEFAULT_VALUES["batch_size"]):
     try:
         model = SentenceTransformer(model)
     except Exception as e:
@@ -47,7 +50,7 @@ def get_embedding_from_sentence_transformer(list_of_sentences, optimization_stra
     return embeddings
 
 def generate_and_store_embeddings(input, output_fd, no_sentences, optimization_strategy=None, input_is_list_of_sentences=False,
-                                  model=constants.DEFAULT_EMBEDDING_DIM, batch_size=constants.DEFAULT_BATCH_SIZE):
+                                  model=DEFAULT_VALUES["model"], batch_size=DEFAULT_VALUES["batch_size"]):
     list_of_sentences = input
 
     if not input_is_list_of_sentences:
@@ -99,6 +102,8 @@ def generate_embeddings(batch_docs, batch_langs, embeddings_output_fd, langs_to_
             document_content_splitted = document_content
 
         document_content_splitted = document_content_splitted.strip().split("\n")
+        # Clip very long sentences
+        document_content_splitted = list(map(lambda doc: doc[:DEFAULT_VALUES["max_sentences_length"]], document_content_splitted))
 
         content.extend(document_content_splitted)
         no_sentences.append(len(document_content_splitted))
@@ -110,13 +115,15 @@ def generate_embeddings(batch_docs, batch_langs, embeddings_output_fd, langs_to_
     generate_and_store_embeddings(content, embeddings_output_fd, no_sentences, optimization_strategy=optimization_strategy,
                                   input_is_list_of_sentences=True, model=model, batch_size=batch_size)
 
-def buffered_read_from_list(inputs, buffer_size_mb, docs_are_base64_values=False):
+def buffered_read_from_list(inputs, buffer_size_mb, max_nolines, docs_are_base64_values=False):
     """Read from a list of inputs where each element is expected
        to be the path of a file which exists
     """
     buffer = []
     idx_start, idx_end = 0, 0
     current_bytes = 0
+    nolines = 0
+    new_line_encoded = "\n".encode()
 
     for input in inputs:
         # Append file content (binary)
@@ -129,20 +136,25 @@ def buffered_read_from_list(inputs, buffer_size_mb, docs_are_base64_values=False
         # Process binary data
 
         current_bytes += len(buffer[-1])
+        nolines += buffer[-1].count(new_line_encoded)
+        nolines += 1 if buffer[-1][-1:] != new_line_encoded else 0
 
         buffer[-1] = buffer[-1].decode("utf-8").strip()
 
-        if current_bytes >= buffer_size_mb * 1000 * 1000:
+        # Check if we have to return the current buffered results (both limits are checked out)
+        if ((buffer_size_mb is not None and current_bytes >= buffer_size_mb * 1000 * 1000) or
+            (max_nolines is not None and nolines >= max_nolines)):
             idx_end += len(buffer)
 
-            yield buffer, current_bytes, (idx_start, idx_end)
+            yield buffer, current_bytes, (idx_start, idx_end), nolines
 
             buffer = []
             current_bytes = 0
             idx_start = idx_end
+            nolines = 0
 
     if len(buffer) > 0:
-        yield buffer, current_bytes, (idx_start, idx_end + len(buffer))
+        yield buffer, current_bytes, (idx_start, idx_end + len(buffer)), nolines
 
 def process_input_file(input_file, max_noentries=None):
     docs = []
@@ -193,6 +205,7 @@ def process_input_file(input_file, max_noentries=None):
 
 def process(docs, langs, embeddings_output, **kwargs):
     max_size_per_batch = kwargs["max_mbytes_per_batch"] if "max_mbytes_per_batch" in kwargs else DEFAULT_VALUES["max_mbytes_per_batch"]
+    max_nolines_per_batch = kwargs["max_nolines_per_batch"] if "max_nolines_per_batch" in kwargs else DEFAULT_VALUES["max_nolines_per_batch"]
     max_batches_process = kwargs["max_batches_process"] if "max_batches_process" in kwargs else DEFAULT_VALUES["max_batches_process"]
     group = kwargs["group"] if "group" in kwargs else DEFAULT_VALUES["group"]
     max_groups = kwargs["max_groups"] if "max_groups" in kwargs else DEFAULT_VALUES["max_groups"]
@@ -203,12 +216,25 @@ def process(docs, langs, embeddings_output, **kwargs):
     sentence_splitting = kwargs["sentence_splitting"] if "sentence_splitting" in kwargs else DEFAULT_VALUES["sentence_splitting"]
     docs_are_base64_values = kwargs["docs_are_base64_values"] if "docs_are_base64_values" in kwargs else False
 
+    # Disable limits if they are negative numbers
+    if (max_size_per_batch is not None and max_size_per_batch < 0):
+        max_size_per_batch = None
+        logging.info("Limit per batch has been disabled: size in MB")
+    if (max_nolines_per_batch is not None and max_nolines_per_batch < 0):
+        max_nolines_per_batch = None
+        logging.info("Limit per batch has been disabled: number of lines")
+    if (max_size_per_batch is None and max_nolines_per_batch is None):
+        logging.warning("Be aware that no limit is enabled in the batch processing, and this might drive you to run out your resources: buffering is disabled")
+
     no_processed_files = 0
     no_processed_batches = 0
+    no_processed_lines = 0
     noprocessed_files = 0
     noprocessed_batches = 0
+    noprocessed_lines = 0
     matched_batches_idx = 0
     size = 0
+    total_size_in_disk_bytes = 0
     embeddings_output_fd = open(embeddings_output, "wb")
 
     if len(docs) != len(langs):
@@ -219,13 +245,30 @@ def process(docs, langs, embeddings_output, **kwargs):
         raise Exception(f"you want to sentence-splitting but did not provide the langs, which is necessary")
 
     # Process batches by size (max. size is 'max_size_per_batch')
-    for batch, (batch_docs, bytes_length_batch, (idx_start, idx_end)) in enumerate(buffered_read_from_list(docs, max_size_per_batch, docs_are_base64_values=docs_are_base64_values)):
+    for batch, (batch_docs, bytes_length_batch, (idx_start, idx_end), nolines) in enumerate(buffered_read_from_list(docs, max_size_per_batch, max_nolines_per_batch, docs_are_base64_values=docs_are_base64_values)):
         size += bytes_length_batch
 
-        logging.debug(f"Batch #{batch} of {float(bytes_length_batch / 1000.0 / 1000.0):.2f} MB from a max. of {max_size_per_batch} MB ({len(batch_docs)} lines)")
+        # Memory variables
+        vmem = virtual_memory()
+        total_vmem_bytes = vmem.total
+        avail_vmem_bytes = vmem.available
+        used_vmem_bytes = nolines * constants.DEFAULT_EMBEDDING_DIM * embedding_utils.OPTIMIZATION_STRATEGY_NBYTES[None]
+        avail_vmem_after_bytes = avail_vmem_bytes - used_vmem_bytes
+        used_disk_bytes = nolines * constants.DEFAULT_EMBEDDING_DIM * embedding_utils.OPTIMIZATION_STRATEGY_NBYTES[optimization_strategy]
+
+        total_size_in_disk_bytes += used_disk_bytes
+
+        logging.debug(f"Batch #{batch} of {float(bytes_length_batch / 1000.0 / 1000.0):.2f} MB from a max. of {max_size_per_batch} MB and {max_nolines_per_batch} number of lines ({len(batch_docs)} docs, {nolines} total of lines)")
+        logging.debug(f"Memory: there will be used ~{used_vmem_bytes / 1000.0 / 1000.0 / 1000.0:.2f} GB of total {total_vmem_bytes / 1000.0 / 1000.0 / 1000.0:.2f} (there will be ~{avail_vmem_after_bytes / 1000.0 / 1000.0 / 1000.0:.2f} GB free while finishing because currently there is {(total_vmem_bytes - avail_vmem_bytes) / 1000.0 / 1000.0 / 1000.0:.2f} GB allocated)")
+        logging.debug(f"Disk: the current batch will use ~{used_disk_bytes / 1000.0 / 1000.0 / 1000.0:.2f} GB of disk (accumulated: {total_size_in_disk_bytes / 1000.0 / 1000.0 / 1000.0:.2f} GB)")
+
+        if avail_vmem_after_bytes < 0:
+            logging.critical(f"There will not be enought memory available for the embeddings generation: {avail_vmem_bytes / 1000 / 1000 / 1000:.2f} GB available from a total of {total_vmem_bytes / 1000 / 1000 / 1000:.2f} GB, and you will use ~{used_vmem_bytes / 1000 / 1000 / 1000:.2f} GB (you SHOULD decrease the max. size per batch, which is {max_size_per_batch} MB)")
+        elif avail_vmem_after_bytes < total_vmem_bytes * 0.1: # 10%
+            logging.warning(f"Your free memory will be less than 10% after the embeddings generation. You should decrease the max. per batch, which is {max_size_per_batch} MB")
 
         if matched_batches_idx >= max_batches_process:
-            logging.info("The max. number of batches to process have been reached")
+            logging.info("The max. number of batches to process has been reached")
             break
 
         # Check if it is our turn to process (group configuration)
@@ -234,7 +277,7 @@ def process(docs, langs, embeddings_output, **kwargs):
 
             batch_langs = langs[idx_start:idx_end]
 
-            logging.info(f"Size: {float(size) / 1000.0 / 1000.0:.2f} MB")
+            logging.info(f"Size of documents to be processed: {float(size) / 1000.0 / 1000.0:.2f} MB")
             logging.info(f"Langs which are going to be processed: {','.join(langs_to_process) if langs_to_process[0] != '-' else 'all languages'}")
 
             # Process the current batch
@@ -244,6 +287,7 @@ def process(docs, langs, embeddings_output, **kwargs):
             size = 0
             noprocessed_batches += 1
             noprocessed_files += len(batch_docs)
+            noprocessed_lines += nolines
         else:
             # It was not our turn to process. This batch corresponds to other group to process it
 
@@ -251,6 +295,7 @@ def process(docs, langs, embeddings_output, **kwargs):
 
             no_processed_batches += 1
             no_processed_files += len(batch_docs)
+            no_processed_lines += nolines
 
         matched_batches_idx += 1
 
@@ -258,6 +303,7 @@ def process(docs, langs, embeddings_output, **kwargs):
 
     logging.info(f"Number of processed batches: {noprocessed_batches} of {noprocessed_batches + no_processed_batches}")
     logging.info(f"Number of processed files: {noprocessed_files} of {noprocessed_files + no_processed_files}")
+    logging.info(f"Number of processed lines: {noprocessed_lines} of {noprocessed_lines + no_processed_lines}")
 
 def main(args):
     input_file = args.input_file
@@ -272,13 +318,14 @@ def main(args):
     batch_size = args.batch_size
     sentence_splitting = args.sentence_splitting
     paths_to_docs_are_base64_values = args.paths_to_docs_are_base64_values
+    max_nolines_per_batch = args.max_nolines_per_batch
 
     docs, langs = process_input_file(input_file)
 
     process(docs, langs, output_file, langs_to_process=langs_to_process, max_mbytes_per_batch=max_size_per_batch,
             max_batches_process=max_batches_process, group=group, max_group=max_group, batch_size=batch_size,
             optimization_strategy=optimization_strategy, model=model, sentence_splitting=sentence_splitting,
-            docs_are_base64_values=paths_to_docs_are_base64_values)
+            docs_are_base64_values=paths_to_docs_are_base64_values, max_nolines_per_batch=max_nolines_per_batch)
 
 def check_args(args):
     errors = [
@@ -324,7 +371,9 @@ if __name__ == '__main__':
     parser.add_argument('--max-batches-process', type=int, default=DEFAULT_VALUES['max_batches_process'], metavar='N',
                         help='Max. number of batches to process. You should take into account that even the non-processed batches due to groups configuration will be counted. The default value is no limit')
     parser.add_argument('--max-mbytes-per-batch', type=int, default=DEFAULT_VALUES['max_mbytes_per_batch'], metavar='N',
-                        help='Max. MB which will be processed in a batch. The provided size is not guaranteed, since once it has been detected that the batch contains that size, it will be processed. The default value is {DEFAULT_VALUES["max_mbytes_per_batch"]} (MB)')
+                        help=f'Max. MB which will be processed in a batch. The provided size is not guaranteed, since once it has been detected that the documents of the current batch contain that size, it will be processed. The default value is {DEFAULT_VALUES["max_mbytes_per_batch"]} (MB)')
+    parser.add_argument('--max-nolines--per-batch', type=int, default=DEFAULT_VALUES['max_nolines_per_batch'], metavar='N',
+                        help=f'Max. number of lines which will be processed in a batch. The provided number of lines is not guaranteed, since once it has been detected that the documents of the current batch contain that number of lines, it will be processed. The default value is {DEFAULT_VALUES["max_nolines_per_batch"]}')
     parser.add_argument('--model', default=DEFAULT_VALUES['model'], metavar='MODEL',
                         help=f'Model to use from \'sentence_transformers\'. The default model is \'{DEFAULT_VALUES["model"]}\'')
     parser.add_argument('--batch-size', default=DEFAULT_VALUES['batch_size'], metavar='N',

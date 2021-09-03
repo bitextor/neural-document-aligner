@@ -75,7 +75,7 @@ neural-document-aligner --help
 The different parameters are:
 
 ```bash
-usage: neural-document-aligner.py [-h]
+usage: neural_document_aligner.py [-h]
                                   [--docalign-strategy {faiss,lev,lev-full,just-merge}]
                                   [--weights-strategy {0,1,2,3}]
                                   [--merging-strategy {0,1,2,3,4,5}]
@@ -86,6 +86,7 @@ usage: neural-document-aligner.py [-h]
                                   [--model MODEL] [--dim N]
                                   [--src-lang SRC_LANG] [--trg-lang TRG_LANG]
                                   [--max-mbytes-per-batch N]
+                                  [--max-nolines-per-batch N]
                                   [--embeddings-batch-size N]
                                   [--generate-and-finish]
                                   [--mask-value <v_1>,<v_2>,...,<v_dim>]
@@ -108,11 +109,11 @@ usage: neural-document-aligner.py [-h]
 
 The input file is expected to be TSV (Tab-Separated Values) file. The columns which we expect are:
 
-1. Path to document. '-' if you do not want to provide this information. The documents are expected to be provided in clear text. If instead of providing paths to the documents you prefer to provide Base64 values of the documents, check out `--paths-to-docs-are-base64-values`.
-2. URL related to the document of the 1st column (other information which is related to the document uniquely can also be provided instead of the URL). '-' if you do not want to provide this information.
+1. Path to document. You may use '-' if you do not want to provide this information. The documents are expected to be provided in **clear text**. If instead of providing paths to the documents you prefer to provide Base64 values of the documents, check out `--paths-to-docs-are-base64-values` (the content will be expected to be in **clear text** as well).
+2. URL related to the document of the 1st column (other information which is related to the document uniquely can also be provided instead of the URL). You may use '-' if you do not want to provide this information. This information will be used for the optional evaluation or in order to show the matches (check out `--output-with-urls`).
 3. 'src' if the documents provided in the 1st column are related to the source embeddings file. 'trg' if the documents provided in the 1st column are related to the target embeddings file.
 
-The 1st and 2nd columns are optional, but either of them will be necessary to be provided. In the case of do not provide the paths to documents, there will be more limitations:
+The 1st and 2nd columns are **optional**, but either of them will be necessary to be provided. In the case of do not provide the paths to documents, there will be **more limitations**:
 
 * You will not be able to generate embeddings, so the provided embeddings will have to exist.
 * The output of the matches will be with the URLs (i.e. 2nd column). This is optional when you provide paths to the documents and URLs.
@@ -207,7 +208,8 @@ There are different parameters in order to achieve different behaviours:
     * `--dim N`: dimensionality of the embeddings. This value might change if you change your embeddings generation source or you apply different processes (e.g. embedding reduction).
     * `--src-lang`: language code (e.g. 'en') of the source documents.
     * `--trg-lang`: language code (e.g. 'fr') of the target documents.
-    * `--max-mbytes-per-batch N`: max. MB of content from the documents which will be loaded when generating embeddings.
+    * `--max-mbytes-per-batch N`: max. MB of content from the documents which will be loaded when generating embeddings, per batch. The provided value will be an upper bound, since full documents are processed and in order to guarantee the provided value, it would be necessary a partial process of the documents.
+    * `--max-nolines-per-batch N`: max. number of lines from the documents which will be loaded when generating embeddings, per batch. The provided value will be an upper bound, since full documents are processed and in order to guarantee the provided value, it would be necessary a partial process of the documents.
     * `--embeddings-batch-size N`: batch size used by [Sentence Transformers](https://github.com/UKPLab/sentence-transformers) when generating embeddings. This will provide control over the usage of the resources (e.g. GPU).
     * `--generate-and-finish`: if you just want to generate the embeddings and do not perform the matching of the documents, this option must be set to finish the execution once the embeddings have been generated.
     * `--mask-value <v_1>,<v_2>,...,<v_dim>`: mask to apply to every embedding. If you have a mask which you know that it works better for a specific pair of languagues, you may apply it through this parameter. The expected values are float values.

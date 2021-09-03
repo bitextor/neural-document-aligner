@@ -4,18 +4,25 @@ import logging
 
 import numpy as np
 
-DEFAULT_EMBEDDING_DIM = 768
+import constants
 
-strategy_2_bits = 8
-strategy_2_bins = (np.array(range(2 ** strategy_2_bits - 1), dtype=np.float32) - (2 ** strategy_2_bits - 1) // 2) / ((2 ** strategy_2_bits) / 2)
-strategy_2_bins_recover = (np.array(range(2 ** strategy_2_bits), dtype=np.float32) - (2 ** strategy_2_bits - 1) // 2) / ((2 ** strategy_2_bits) / 2)
+_STRATEGY_2_BITS = 8
+_STRATEGY_2_BINS = (np.array(range(2 ** _STRATEGY_2_BITS - 1), dtype=np.float32) - (2 ** _STRATEGY_2_BITS - 1) // 2) / ((2 ** _STRATEGY_2_BITS) / 2)
+_STRATEGY_2_BINS_RECOVER = (np.array(range(2 ** _STRATEGY_2_BITS), dtype=np.float32) - (2 ** _STRATEGY_2_BITS - 1) // 2) / ((2 ** _STRATEGY_2_BITS) / 2)
+
+OPTIMIZATION_STRATEGY_NBYTES = {
+    None: 4, # no optimization, np.float32
+    0: 4,    # no optimization, np.float32
+    1: 2,    # np.float16
+    2: 1,    # custom vector quantization to 1B
+}
 
 def if_(l, arg, r_ok, r_nok):
     if l(arg):
         return r_ok
     return r_nok
 
-def get_original_embedding_from_optimized(embedding=None, file=None, dim=DEFAULT_EMBEDDING_DIM, strategy=1, to_float32=True):
+def get_original_embedding_from_optimized(embedding=None, file=None, dim=constants.DEFAULT_EMBEDDING_DIM, strategy=1, to_float32=True):
     if (embedding is None and file is None):
         logging.error("'embedding' or 'file' must have value (if both, 'file' will be used)")
         return None
@@ -58,7 +65,7 @@ def get_original_embedding_from_optimized(embedding=None, file=None, dim=DEFAULT
         x = x
     elif strategy == 2:
         # vector quantization (range [-1., 1.])
-        x = strategy_2_bins_recover[x]
+        x = _STRATEGY_2_BINS_RECOVER[x]
     else:
         logging.error(f"Unknown optimization strategy: returning None")
         return None
@@ -84,7 +91,7 @@ def compare(x, y, atol=1.0, rtol=1e-4, verbose=True):
 
     return close
 
-def load(file, dim=DEFAULT_EMBEDDING_DIM, strategy=None, file_is_fd=False, to_float32=True):
+def load(file, dim=constants.DEFAULT_EMBEDDING_DIM, strategy=None, file_is_fd=False, to_float32=True):
     x = None
 
     if file_is_fd:
@@ -114,7 +121,7 @@ def get_optimized_embedding(embedding, strategy=1):
         x = x.astype(np.float16, copy=False)
     elif strategy == 2:
         # linear quantization (range [-1., 1.])
-        x = np.digitize(x, strategy_2_bins).astype(np.uint8)
+        x = np.digitize(x, _STRATEGY_2_BINS).astype(np.uint8)
     else:
         logging.warning(f"Unknown optimization strategy ({strategy}): returning embedding without any optimization strategy applied")
 
@@ -141,7 +148,7 @@ def store(embedding, file, strategy=None):
     else:
         x.tofile(file)
 
-def test_precision(embedding, strategy, dim=DEFAULT_EMBEDDING_DIM, return_optimized_embedding=False):
+def test_precision(embedding, strategy, dim=constants.DEFAULT_EMBEDDING_DIM, return_optimized_embedding=False):
     if len(embedding.shape) != 2:
         logging.error(f"Unexpected shape ({embedding.shape})")
         return None
