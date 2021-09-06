@@ -217,10 +217,10 @@ def process(docs, langs, embeddings_output, **kwargs):
     docs_are_base64_values = kwargs["docs_are_base64_values"] if "docs_are_base64_values" in kwargs else False
 
     # Disable limits if they are negative numbers
-    if (max_size_per_batch is not None and max_size_per_batch < 0):
+    if (max_size_per_batch is None or max_size_per_batch < 0):
         max_size_per_batch = None
         logging.info("Limit per batch has been disabled: size in MB")
-    if (max_nolines_per_batch is not None and max_nolines_per_batch < 0):
+    if (max_nolines_per_batch is None or max_nolines_per_batch < 0):
         max_nolines_per_batch = None
         logging.info("Limit per batch has been disabled: number of lines")
     if (max_size_per_batch is None and max_nolines_per_batch is None):
