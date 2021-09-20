@@ -16,16 +16,22 @@ import exceptions
 
 def process_input_file(input_file):
     embeddings_path = []
+    file = sys.stdin
 
-    with open(input_file) as f:
-        for idx, line in enumerate(f):
-            line = line.strip()
+    if input_file != "-":
+        file = open(input_file)
 
-            if not os.path.isfile(line):
-                logging.warning(f"Embedding file does not exist in line #{idx + 1} (it will be skipped)")
-                continue
+    for idx, line in enumerate(file):
+        line = line.strip()
 
-            embeddings_path.append(line)
+        if not os.path.isfile(line):
+            logging.warning(f"Embedding file does not exist in line #{idx + 1} (it will be skipped)")
+            continue
+
+        embeddings_path.append(line)
+
+    if input_file != "-":
+        file.close()
 
     return embeddings_path
 
@@ -80,7 +86,7 @@ def main(args):
     optimization_strategy = None if args.optimization_strategy == 0 else args.optimization_strategy
     store_optimization_strategy = None if args.store_optimization_strategy == 0 else args.store_optimization_strategy
 
-    if not os.path.isfile(input_file):
+    if (input_file != "-" and not os.path.isfile(input_file)):
         raise FileNotFoundError(input_file)
     if os.path.isfile(output_file):
         raise exceptions.FileFoundError(output_file)
@@ -104,7 +110,7 @@ if __name__ == "__main__":
 
     # Embedding
     parser.add_argument('input_file', metavar='input-file',
-        help='TSV file with doc_path entries and without header')
+        help='TSV file with doc_path entries and without header. If \'-\' is provided, stdin will be used')
     parser.add_argument('output_file', metavar='output-file',
         help='Output file where the embeddings will be stored')
 
