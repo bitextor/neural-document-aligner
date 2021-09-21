@@ -1216,6 +1216,10 @@ def main(args):
                 src_result = src_docs.index(src_result)
                 trg_result = trg_docs.index(trg_result)
 
+            # Range: [1, N]
+            src_result += 1
+            trg_result += 1
+
         if do_not_show_scores:
             print(f"{src_result}\t{trg_result}")
         else:
