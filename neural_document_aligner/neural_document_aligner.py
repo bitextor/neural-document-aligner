@@ -1195,6 +1195,17 @@ def main(args):
     if results_variable is None:
         raise Exception("could not get the results (maybe wrong results strategy?)")
 
+    # Print header
+    if output_with_idxs:
+        sys.stdout.write("src_idx\ttrg_idx")
+    else:
+        sys.stdout.write("src_url\ttrg_url")
+
+    if do_not_show_scores:
+        sys.stdout.write("\n")
+    else:
+        sys.stdout.write("\tnda_score\n")
+
     # Print results
     for r in results_variable:
         src_result = r[0]
